@@ -1,5 +1,6 @@
 package io.github.ayongbox.daos.core.pipeline;
 
+import io.github.ayongbox.daos.core.ir.FilterNode;
 import io.github.ayongbox.daos.core.ir.QueryPlan;
 import io.github.ayongbox.daos.core.ir.SqlStatement;
 
@@ -11,4 +12,9 @@ public interface SqlRenderer {
     Dialect dialect();
 
     SqlStatement render(QueryPlan plan);
+
+    /**
+     * 渲染独立的 WHERE 条件。写入语句复用查询侧的条件语法，禁止各自拼接。
+     */
+    SqlStatement renderPredicate(FilterNode filter);
 }

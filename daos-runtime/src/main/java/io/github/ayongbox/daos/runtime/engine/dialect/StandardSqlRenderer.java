@@ -37,8 +37,7 @@ final class StandardSqlRenderer implements SqlRenderer {
     }
 
     @Override
-    public SqlStatement render(QueryPlan plan) {
-        if (!(plan instanceof QueryPlan.Select select)) {
+    public SqlStatement render(QueryPlan plan) {        if (!(plan instanceof QueryPlan.Select select)) {
             throw new IllegalArgumentException("不支持的查询计划: " + plan.getClass().getName());
         }
         List<Object> parameters = new ArrayList<>();
@@ -81,6 +80,14 @@ final class StandardSqlRenderer implements SqlRenderer {
             joiner.add(dialect.quote(item.column()) + (item.ascending() ? " ASC" : " DESC"));
         }
         return joiner.toString();
+    }
+
+    @Override
+    public SqlStatement renderPredicate(FilterNode filter) {
+        Objects.requireNonNull(filter, "filter");
+        List<Object> parameters = new ArrayList<>();
+        String sql = renderFilter(filter, parameters);
+        return new SqlStatement(sql, parameters);
     }
 
     private String renderFilter(FilterNode node, List<Object> parameters) {

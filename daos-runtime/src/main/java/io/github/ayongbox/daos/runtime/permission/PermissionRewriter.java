@@ -74,7 +74,7 @@ public final class PermissionRewriter {
 
         List<SchemaPermission> allows = new ArrayList<>();
         List<SchemaPermission> denies = new ArrayList<>();
-        collect(schema, table, permissions, now, allows, denies);
+        collect(schema, table, permissions, ActionType.READ, now, allows, denies);
 
         Set<String> hiddenColumns = hiddenColumns(table, allows);
         rejectHiddenFilter(request, plan, table, hiddenColumns);
@@ -104,16 +104,73 @@ public final class PermissionRewriter {
             IrTable table,
             PermissionContext permissions,
             Instant now) {
+        return effectiveFieldMask(schema, table, permissions, ActionType.READ, now);
+    }
+
+    /**
+     * 汇总当前主体在指定动作上的字段掩码。没有命中 ALLOW 规则时返回空掩码。
+     */
+    public FieldMask effectiveFieldMask(
+            NormalizedSchema schema,
+            IrTable table,
+            PermissionContext permissions,
+            ActionType action,
+            Instant now) {
 
         Objects.requireNonNull(schema, "schema");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(permissions, "permissions");
+        Objects.requireNonNull(action, "action");
         Objects.requireNonNull(now, "now");
 
         List<SchemaPermission> allows = new ArrayList<>();
         List<SchemaPermission> denies = new ArrayList<>();
-        collect(schema, table, permissions, now, allows, denies);
+        collect(schema, table, permissions, action, now, allows, denies);
         return mergeFieldMask(allows);
+    }
+
+    /**
+     * 解析写入动作的行级范围。没有命中 ALLOW 规则时直接拒绝，返回的条件供
+     * UPDATE / DELETE 的 WHERE 复用，保证越权记录不会被命中。
+     */
+    public WritePermission resolveWrite(
+            NormalizedSchema schema,
+            IrTable table,
+            PermissionContext permissions,
+            ActionType action,
+            Instant now) {
+
+        Objects.requireNonNull(schema, "schema");
+        Objects.requireNonNull(table, "table");
+        Objects.requireNonNull(permissions, "permissions");
+        Objects.requireNonNull(action, "action");
+        Objects.requireNonNull(now, "now");
+
+        List<SchemaPermission> allows = new ArrayList<>();
+        List<SchemaPermission> denies = new ArrayList<>();
+        collect(schema, table, permissions, action, now, allows, denies);
+        if (allows.isEmpty()) {
+            throw new PermissionRewriteException(
+                    "当前主体没有表 " + table.tableCode() + " 的 " + action.code() + " 权限");
+        }
+
+        List<FilterNode> predicates = new ArrayList<>();
+        predicates.add(tenantPredicate(table, permissions));
+        predicates.add(softDeletePredicate(table));
+        predicates.add(allowPredicate(table, permissions, allows));
+        if (!denies.isEmpty()) {
+            predicates.add(new FilterNode.Not(orOf(denyPredicates(table, permissions, denies))));
+        }
+        return new WritePermission(conjoin(predicates), mergeFieldMask(allows));
+    }
+
+    /** 写入动作的解析结果：行级范围与字段掩码。 */
+    public record WritePermission(FilterNode predicate, FieldMask fieldMask) {
+
+        public WritePermission {
+            Objects.requireNonNull(predicate, "predicate");
+            Objects.requireNonNull(fieldMask, "fieldMask");
+        }
     }
 
     private FieldMask mergeFieldMask(List<SchemaPermission> allows) {
@@ -143,6 +200,7 @@ public final class PermissionRewriter {
             NormalizedSchema schema,
             IrTable table,
             PermissionContext permissions,
+            ActionType action,
             Instant now,
             List<SchemaPermission> allows,
             List<SchemaPermission> denies) {
@@ -154,7 +212,7 @@ public final class PermissionRewriter {
             if (rule.resource().type() != ResourceType.TABLE
                     || !schema.appCode().equals(rule.resource().appCode())
                     || !table.tableCode().equals(rule.resource().objectCode())
-                    || !rule.actions().contains(ActionType.READ)) {
+                    || !rule.actions().contains(action)) {
                 continue;
             }
 
