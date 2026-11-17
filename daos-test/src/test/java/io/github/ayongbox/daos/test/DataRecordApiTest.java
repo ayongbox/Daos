@@ -43,6 +43,7 @@ import io.github.ayongbox.daos.runtime.identity.PermissionContextFactory;
 import io.github.ayongbox.daos.runtime.identity.SessionPermissionService;
 import io.github.ayongbox.daos.runtime.store.InMemoryMetadataStore;
 import io.github.ayongbox.daos.runtime.store.InMemorySnapshotStore;
+import io.github.ayongbox.daos.web.auth.DaosPermissionChecker;
 import io.github.ayongbox.daos.web.auth.SessionAuthInterceptor;
 import io.github.ayongbox.daos.web.data.DataRecordController;
 import io.github.ayongbox.daos.web.support.ApiExceptionHandler;
@@ -113,10 +114,13 @@ class DataRecordApiTest {
                 null, List.of(member), List.of(role), List.of(binding));
 
         AuditLog auditLog = new AuditLog(new InMemoryAuditStore());
+        SessionPermissionService permissionService =
+                new SessionPermissionService(snapshotStore, new PermissionContextFactory(identityStore));
         DataRecordController controller = new DataRecordController(
                 new DataQueryService(snapshotStore, dataAccess, new PostgresDialect(), auditLog),
                 new DataWriteService(snapshotStore, dataAccess, new PostgresDialect(), auditLog),
-                new SessionPermissionService(snapshotStore, new PermissionContextFactory(identityStore)),
+                permissionService,
+                new DaosPermissionChecker(permissionService),
                 snapshotStore);
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new ApiExceptionHandler())

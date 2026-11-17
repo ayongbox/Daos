@@ -92,8 +92,8 @@ public class AuthConfiguration {
     }
 
     @Bean
-    public PermissionChecker permissionChecker() {
-        return new DaosPermissionChecker();
+    public PermissionChecker permissionChecker(SessionPermissionService sessionPermissionService) {
+        return new DaosPermissionChecker(sessionPermissionService);
     }
 
     @Bean

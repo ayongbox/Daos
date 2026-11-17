@@ -65,12 +65,15 @@ public final class SessionAuthInterceptor implements HandlerInterceptor {
     /**
      * 同步写入 Baseon 登录上下文，供其日志、审计与 {@code SecurityUtil} 读取。
      *
-     * <p>Baseon 的 {@code LoginUser} 用 Long 承载用户与租户 id，而 Daos 使用 ULID 与字符串租户，
-     * 因此只写入用户名；权限是应用级语义，不能塞进全局权限集合。</p>
+     * <p>Daos 使用 ULID 与字符串租户，写入 Baseon 的字符串标识字段
+     * {@code subjectId} / {@code tenantKey}；权限是应用级语义，不塞进全局权限集合，
+     * 由 {@link DaosPermissionChecker} 按应用维度裁决。</p>
      */
     private static void bindBaseonLoginUser(Session session) {
         LoginUser user = new LoginUser();
         user.setUsername(session.username());
+        user.setSubjectId(session.subjectId());
+        user.setTenantKey(session.tenantId());
         user.setPermissions(Set.of());
         SecurityUtil.set(user);
     }

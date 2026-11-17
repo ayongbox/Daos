@@ -117,7 +117,8 @@ Daos 以 BOM + starter 的方式消费 Baseon，并在 Web 契约上与其保持
 |---|---|
 | 响应体 | Controller 统一返回 `R<T>`，分页用 `PageQuery` / `PageResult` |
 | 异常 | Daos 领域异常由 `ApiExceptionHandler` 映射为 `R` 错误码；其余异常交给 Baseon `GlobalExceptionHandler`，不并存两套格式 |
-| 登录上下文 | 会话拦截器写入 Baseon `LoginUser`，供日志、审计与 `SecurityUtil` 读取 |
+| 登录上下文 | 会话拦截器写入 Baseon `LoginUser`（`username` + `subjectId` + `tenantKey`），供日志、审计与 `SecurityUtil` 读取 |
+| 权限校验 | 数据接口通过 Baseon `PermissionChecker` 的应用维度方法裁决动作权限，由 `DaosPermissionChecker` 适配到 `PermissionContext` |
 | 链路 id | 审计事件通过 `TraceIdSupplier` 读取 `baseon-starter-trace` 的 traceId |
 | 用户上下文请求头 | `baseon.web.user-context.enabled=false`，身份只来自会话 |
 
@@ -127,8 +128,10 @@ Daos 以 BOM + starter 的方式消费 Baseon，并在 Web 契约上与其保持
 - **动态表直连 JDBC**：低代码表在运行期建立，没有 MyBatis-Plus 实体，DDL 与通用查询走方言渲染；
 - **权限是应用级语义**：数据范围、行级条件、字段脱敏由 `PermissionContext` 承载，不映射为全局权限串。
 
-已知契约不匹配（作为对 Baseon 的反馈）：
+契约对齐结果：
 
-1. `LoginUser` 的用户与租户 id 为 `Long`，Daos 使用 ULID 与字符串租户，桥接时只能写入用户名；
-2. Baseon `PermissionChecker` 接收全局权限串（`resource:action`），缺少应用维度，无法直接表达 Daos 的应用级权限；
-3. `@RequiresPermission` 在控制器解析权限上下文之前执行，尚不能用于数据接口，需在平台级权限点出现后再接线。
+1. **字符串主体与租户**：Baseon `LoginUser` 增加 `subjectId` / `tenantKey`，`SecurityUtil` 增加同名读取方法（未设置时回退为数值 id 的字符串形式）；会话拦截器直接写入 ULID 与字符串租户，不再只写用户名。
+2. **应用维度权限**：Baseon `PermissionChecker` 增加两参默认方法 `hasPermission(appId, permission)`，既有实现无需改动；`@RequiresPermission` 增加 `appId` 属性（支持 `#参数` SpEL）。
+3. **解析时序**：权限上下文不再要求控制器先解析。`DaosPermissionChecker` 在切面/接口调用时从会话按应用惰性解析，并缓存到 `PermissionContextHolder`（按 `appId` 隔离）；数据接口以 `table:read` / `table:create` / `table:update` / `table:delete` 调用同一 checker 完成动作级裁决。
+
+刻意不做的接线：Daos 使用自建会话登录，不引入 `baseon-starter-auth` 的 JWT 过滤器，因此不用 `@RequiresPermission` 注解，而是以编程方式调用其 `PermissionChecker` 契约；注解路径留给使用 starter-auth 的应用，两参方法与切面逻辑已被 Baseon 单测覆盖。

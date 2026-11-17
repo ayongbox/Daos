@@ -3,6 +3,7 @@ package io.github.ayongbox.daos.web.data;
 import io.github.ayongbox.baseon.core.db.PageQuery;
 import io.github.ayongbox.baseon.core.db.PageResult;
 import io.github.ayongbox.baseon.core.model.R;
+import io.github.ayongbox.baseon.core.secure.PermissionChecker;
 import io.github.ayongbox.daos.core.auth.Session;
 import io.github.ayongbox.daos.core.ir.PermissionContext;
 import io.github.ayongbox.daos.core.ir.QueryRequest;
@@ -13,6 +14,7 @@ import io.github.ayongbox.daos.core.spi.SnapshotStore;
 import io.github.ayongbox.daos.runtime.auth.AuthenticationException;
 import io.github.ayongbox.daos.runtime.exec.DataQueryService;
 import io.github.ayongbox.daos.runtime.exec.DataWriteService;
+import io.github.ayongbox.daos.runtime.identity.AccessDeniedException;
 import io.github.ayongbox.daos.runtime.identity.SessionPermissionService;
 import io.github.ayongbox.daos.web.auth.PermissionContextHolder;
 import io.github.ayongbox.daos.web.auth.SessionAuthInterceptor;
@@ -43,16 +45,19 @@ public class DataRecordController {
     private final DataQueryService queryService;
     private final DataWriteService writeService;
     private final SessionPermissionService permissionService;
+    private final PermissionChecker permissionChecker;
     private final SnapshotStore snapshotStore;
 
     public DataRecordController(
             DataQueryService queryService,
             DataWriteService writeService,
             SessionPermissionService permissionService,
+            PermissionChecker permissionChecker,
             SnapshotStore snapshotStore) {
         this.queryService = queryService;
         this.writeService = writeService;
         this.permissionService = permissionService;
+        this.permissionChecker = permissionChecker;
         this.snapshotStore = snapshotStore;
     }
 
@@ -72,6 +77,7 @@ public class DataRecordController {
                 fieldCodes(fields, table), null, null,
                 (int) page.getCurrent(), (int) page.getSize());
         PermissionContext context = context(servletRequest, appId);
+        requirePermission(appId, "read");
         long total = queryService.count(appId, table.id(), request, context);
         List<Map<String, Object>> records = queryService.query(appId, table.id(), request, context);
         return R.ok(PageResult.of(total, page.getCurrent(), page.getSize(), records));
@@ -84,6 +90,7 @@ public class DataRecordController {
             @RequestBody Map<String, Object> values,
             HttpServletRequest servletRequest) {
         SchemaTable table = requireTable(appId, tableCode);
+        requirePermission(appId, "create");
         String id = writeService.insert(appId, table.id(), values, context(servletRequest, appId));
         return R.ok(Map.of("id", id));
     }
@@ -97,6 +104,7 @@ public class DataRecordController {
             @RequestBody Map<String, Object> values,
             HttpServletRequest servletRequest) {
         SchemaTable table = requireTable(appId, tableCode);
+        requirePermission(appId, "update");
         int affected = writeService.update(
                 appId, table.id(), recordId, version, values, context(servletRequest, appId));
         return R.ok(Map.of("affected", affected));
@@ -110,19 +118,33 @@ public class DataRecordController {
             @RequestParam long version,
             HttpServletRequest servletRequest) {
         SchemaTable table = requireTable(appId, tableCode);
+        requirePermission(appId, "delete");
         int affected = writeService.delete(
                 appId, table.id(), recordId, version, context(servletRequest, appId));
         return R.ok(Map.of("affected", affected));
     }
 
     private PermissionContext context(HttpServletRequest request, String appId) {
+        PermissionContext cached = PermissionContextHolder.get(request, appId);
+        if (cached != null) {
+            return cached;
+        }
         Session session = (Session) request.getAttribute(SessionAuthInterceptor.SESSION_ATTRIBUTE);
         if (session == null) {
             throw new AuthenticationException("未登录或会话已过期");
         }
         PermissionContext context = permissionService.resolve(session, appId);
-        PermissionContextHolder.put(request, context);
+        PermissionContextHolder.put(request, appId, context);
         return context;
+    }
+
+    /**
+     * 动作级权限校验，交给 Baseon {@link PermissionChecker} 的应用维度契约裁决。
+     */
+    private void requirePermission(String appId, String action) {
+        if (!permissionChecker.hasPermission(appId, "table:" + action)) {
+            throw new AccessDeniedException("无权限执行 table:" + action);
+        }
     }
 
     private SchemaTable requireTable(String appId, String tableCode) {
