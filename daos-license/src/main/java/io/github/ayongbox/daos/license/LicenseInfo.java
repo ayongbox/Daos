@@ -20,6 +20,13 @@ public record LicenseInfo(
         features = features == null ? List.of() : List.copyOf(features);
     }
 
+    /**
+     * 无法解析或验签失败时的安全默认值。
+     */
+    public static LicenseInfo invalid() {
+        return new LicenseInfo("", LicenseTier.COMMUNITY, List.of(), null, null, 0, 0, false);
+    }
+
     public boolean supports(LicenseFeature feature) {
         return valid && (tier == LicenseTier.ENTERPRISE || features.contains(feature));
     }
