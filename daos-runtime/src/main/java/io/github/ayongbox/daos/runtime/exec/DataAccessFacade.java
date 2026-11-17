@@ -49,6 +49,37 @@ public final class DataAccessFacade {
         }
     }
 
+    /**
+     * 在同一事务内顺序执行多条语句，任一失败整体回滚。
+     *
+     * <p>供结构演进使用；语句必须已经渲染完成，本方法不做编译与权限判断。</p>
+     */
+    public void execute(List<SqlStatement> statements) {
+        Objects.requireNonNull(statements, "statements");
+        if (statements.isEmpty()) {
+            return;
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            boolean autoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                for (SqlStatement statement : statements) {
+                    try (PreparedStatement prepared = prepare(connection, statement)) {
+                        prepared.executeUpdate();
+                    }
+                }
+                connection.commit();
+            } catch (SQLException error) {
+                connection.rollback();
+                throw new SqlExecutionException("批量执行失败，已回滚: " + error.getMessage(), error);
+            } finally {
+                connection.setAutoCommit(autoCommit);
+            }
+        } catch (SQLException error) {
+            throw new SqlExecutionException("批量执行失败: " + error.getMessage(), error);
+        }
+    }
+
     private PreparedStatement prepare(Connection connection, SqlStatement statement) throws SQLException {
         PreparedStatement prepared = connection.prepareStatement(statement.sql());
         List<Object> parameters = statement.parameters();

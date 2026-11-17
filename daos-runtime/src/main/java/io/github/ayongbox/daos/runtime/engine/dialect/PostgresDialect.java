@@ -131,6 +131,59 @@ public final class PostgresDialect extends AbstractSqlDialect {
             return SqlStatement.of("DROP INDEX IF EXISTS " + quote(indexName));
         }
 
+        @Override
+        public SqlStatement addColumn(String physicalTable, ColumnDdl column) {
+            return SqlStatement.of("ALTER TABLE " + quote(physicalTable)
+                    + " ADD COLUMN " + columnDefinition(column));
+        }
+
+        @Override
+        public SqlStatement dropColumn(String physicalTable, String columnName) {
+            return SqlStatement.of("ALTER TABLE " + quote(physicalTable)
+                    + " DROP COLUMN " + quote(columnName));
+        }
+
+        @Override
+        public SqlStatement alterColumn(String physicalTable, ColumnDdl oldColumn, ColumnDdl newColumn) {
+            String column = quote(newColumn.name());
+            java.util.List<String> actions = new java.util.ArrayList<>();
+            if (!oldColumn.sqlType().equals(newColumn.sqlType())) {
+                actions.add("ALTER COLUMN " + column + " TYPE " + newColumn.sqlType());
+            }
+            if (oldColumn.nullable() != newColumn.nullable()) {
+                actions.add("ALTER COLUMN " + column
+                        + (newColumn.nullable() ? " DROP NOT NULL" : " SET NOT NULL"));
+            }
+            if (!java.util.Objects.equals(oldColumn.defaultValue(), newColumn.defaultValue())) {
+                actions.add(newColumn.defaultValue() == null
+                        ? "ALTER COLUMN " + column + " DROP DEFAULT"
+                        : "ALTER COLUMN " + column + " SET DEFAULT " + newColumn.defaultValue());
+            }
+            if (actions.isEmpty()) {
+                throw new IllegalArgumentException("列定义没有变化: " + newColumn.name());
+            }
+            return SqlStatement.of("ALTER TABLE " + quote(physicalTable)
+                    + " " + String.join(", ", actions));
+        }
+
+        @Override
+        public SqlStatement renameColumn(String physicalTable, String from, String to) {
+            return SqlStatement.of("ALTER TABLE " + quote(physicalTable)
+                    + " RENAME COLUMN " + quote(from) + " TO " + quote(to));
+        }
+
+        private String columnDefinition(ColumnDdl column) {
+            StringBuilder sql = new StringBuilder(quote(column.name()))
+                    .append(' ').append(column.sqlType());
+            if (!column.nullable()) {
+                sql.append(" NOT NULL");
+            }
+            if (column.defaultValue() != null) {
+                sql.append(" DEFAULT ").append(column.defaultValue());
+            }
+            return sql.toString();
+        }
+
         private String joinColumns(List<String> columns) {
             StringJoiner joiner = new StringJoiner(", ");
             columns.forEach(column -> joiner.add(quote(column)));

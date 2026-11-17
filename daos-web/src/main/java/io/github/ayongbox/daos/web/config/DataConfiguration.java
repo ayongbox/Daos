@@ -1,12 +1,20 @@
 package io.github.ayongbox.daos.web.config;
 
+import io.github.ayongbox.daos.core.pipeline.ddl.MigrationCompiler;
 import io.github.ayongbox.daos.core.pipeline.dialect.SqlDialect;
+import io.github.ayongbox.daos.core.spi.MetadataStore;
+import io.github.ayongbox.daos.core.spi.MigrationStore;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
 import io.github.ayongbox.daos.runtime.audit.AuditLog;
+import io.github.ayongbox.daos.runtime.engine.PublishService;
+import io.github.ayongbox.daos.runtime.engine.SchemaEvolutionService;
+import io.github.ayongbox.daos.runtime.engine.ddl.DefaultMigrationCompiler;
 import io.github.ayongbox.daos.runtime.engine.dialect.PostgresDialect;
 import io.github.ayongbox.daos.runtime.exec.DataAccessFacade;
 import io.github.ayongbox.daos.runtime.exec.DataQueryService;
 import io.github.ayongbox.daos.runtime.exec.DataWriteService;
+import io.github.ayongbox.daos.runtime.store.InMemoryMetadataStore;
+import io.github.ayongbox.daos.runtime.store.InMemoryMigrationStore;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -45,5 +53,38 @@ public class DataConfiguration {
             SqlDialect sqlDialect,
             AuditLog auditLog) {
         return new DataWriteService(snapshotStore, dataAccessFacade, sqlDialect, auditLog);
+    }
+
+    @Bean
+    public MetadataStore metadataStore() {
+        return new InMemoryMetadataStore();
+    }
+
+    @Bean
+    public MigrationStore migrationStore() {
+        return new InMemoryMigrationStore();
+    }
+
+    @Bean
+    public PublishService publishService(MetadataStore metadataStore, SnapshotStore snapshotStore) {
+        return new PublishService(metadataStore, snapshotStore);
+    }
+
+    @Bean
+    public MigrationCompiler migrationCompiler() {
+        return new DefaultMigrationCompiler();
+    }
+
+    @Bean
+    public SchemaEvolutionService schemaEvolutionService(
+            MetadataStore metadataStore,
+            SnapshotStore snapshotStore,
+            MigrationStore migrationStore,
+            MigrationCompiler migrationCompiler,
+            DataAccessFacade dataAccessFacade,
+            SqlDialect sqlDialect) {
+        return new SchemaEvolutionService(
+                metadataStore, snapshotStore, migrationStore, migrationCompiler,
+                dataAccessFacade, sqlDialect);
     }
 }

@@ -130,6 +130,42 @@ public final class MysqlDialect extends AbstractSqlDialect {
                     "DROP INDEX " + quote(indexName) + " ON " + quote(physicalTable));
         }
 
+        @Override
+        public SqlStatement addColumn(String physicalTable, ColumnDdl column) {
+            return SqlStatement.of("ALTER TABLE " + quote(physicalTable)
+                    + " ADD COLUMN " + columnDefinition(column));
+        }
+
+        @Override
+        public SqlStatement dropColumn(String physicalTable, String columnName) {
+            return SqlStatement.of("ALTER TABLE " + quote(physicalTable)
+                    + " DROP COLUMN " + quote(columnName));
+        }
+
+        @Override
+        public SqlStatement alterColumn(String physicalTable, ColumnDdl oldColumn, ColumnDdl newColumn) {
+            return SqlStatement.of("ALTER TABLE " + quote(physicalTable)
+                    + " MODIFY COLUMN " + columnDefinition(newColumn));
+        }
+
+        @Override
+        public SqlStatement renameColumn(String physicalTable, String from, String to) {
+            return SqlStatement.of("ALTER TABLE " + quote(physicalTable)
+                    + " RENAME COLUMN " + quote(from) + " TO " + quote(to));
+        }
+
+        private String columnDefinition(ColumnDdl column) {
+            StringBuilder sql = new StringBuilder(quote(column.name()))
+                    .append(' ').append(column.sqlType());
+            if (!column.nullable()) {
+                sql.append(" NOT NULL");
+            }
+            if (column.defaultValue() != null) {
+                sql.append(" DEFAULT ").append(column.defaultValue());
+            }
+            return sql.toString();
+        }
+
         private String joinColumns(List<String> columns) {
             StringJoiner joiner = new StringJoiner(", ");
             columns.forEach(column -> joiner.add(quote(column)));

@@ -34,6 +34,17 @@ public interface DdlDialect {
 
     SqlStatement dropIndex(String physicalTable, String indexName);
 
+    SqlStatement addColumn(String physicalTable, ColumnDdl column);
+
+    SqlStatement dropColumn(String physicalTable, String columnName);
+
+    /**
+     * 修改列定义。只有类型、可空或默认值发生变化时才会调用；主键变更不在演进范围。
+     */
+    SqlStatement alterColumn(String physicalTable, ColumnDdl oldColumn, ColumnDdl newColumn);
+
+    SqlStatement renameColumn(String physicalTable, String from, String to);
+
     record TableDdl(String physicalName, List<ColumnDdl> columns) {
         public TableDdl {
             Objects.requireNonNull(physicalName, "physicalName");
