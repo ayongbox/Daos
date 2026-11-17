@@ -16,6 +16,8 @@ import io.github.ayongbox.daos.core.metadata.common.ResourceType;
 import io.github.ayongbox.daos.core.metadata.common.SubjectType;
 import io.github.ayongbox.daos.core.metadata.permission.ConditionItem;
 import io.github.ayongbox.daos.core.metadata.permission.DataScope;
+import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
+import io.github.ayongbox.daos.core.metadata.permission.MaskRule;
 import io.github.ayongbox.daos.core.metadata.permission.PermissionSubject;
 import io.github.ayongbox.daos.core.metadata.permission.RowCondition;
 import io.github.ayongbox.daos.core.metadata.permission.SchemaPermission;
@@ -24,8 +26,12 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -88,6 +94,49 @@ public final class PermissionRewriter {
 
         return new QueryPlan.Select(
                 plan.physicalTable(), items, conjoin(predicates), plan.orderBy(), plan.limit(), plan.offset());
+    }
+
+    /**
+     * 汇总当前主体在目标表上的字段掩码。多条 ALLOW 规则取并集，脱敏规则按优先级取第一条。
+     */
+    public FieldMask effectiveFieldMask(
+            NormalizedSchema schema,
+            IrTable table,
+            PermissionContext permissions,
+            Instant now) {
+
+        Objects.requireNonNull(schema, "schema");
+        Objects.requireNonNull(table, "table");
+        Objects.requireNonNull(permissions, "permissions");
+        Objects.requireNonNull(now, "now");
+
+        List<SchemaPermission> allows = new ArrayList<>();
+        List<SchemaPermission> denies = new ArrayList<>();
+        collect(schema, table, permissions, now, allows, denies);
+        return mergeFieldMask(allows);
+    }
+
+    private FieldMask mergeFieldMask(List<SchemaPermission> allows) {
+        Set<String> hidden = new LinkedHashSet<>();
+        Set<String> readonly = new LinkedHashSet<>();
+        Set<String> required = new LinkedHashSet<>();
+        Map<String, MaskRule> masks = new LinkedHashMap<>();
+
+        List<SchemaPermission> ordered = allows.stream()
+                .sorted(Comparator.comparingInt(SchemaPermission::priority).reversed()
+                        .thenComparing(SchemaPermission::code))
+                .toList();
+        for (SchemaPermission rule : ordered) {
+            FieldMask mask = rule.fieldMask();
+            hidden.addAll(mask.hiddenFieldIds());
+            readonly.addAll(mask.readonlyFieldIds());
+            required.addAll(mask.requiredFieldIds());
+            for (MaskRule maskRule : mask.maskRules()) {
+                masks.putIfAbsent(maskRule.fieldId(), maskRule);
+            }
+        }
+        return new FieldMask(
+                List.copyOf(hidden), List.copyOf(readonly), List.copyOf(required), List.copyOf(masks.values()));
     }
 
     private void collect(

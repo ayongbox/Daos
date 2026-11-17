@@ -10,6 +10,7 @@ import io.github.ayongbox.daos.core.metadata.common.ConditionOperator;
 import io.github.ayongbox.daos.core.metadata.common.DataScopeType;
 import io.github.ayongbox.daos.core.metadata.common.EffectType;
 import io.github.ayongbox.daos.core.metadata.common.FieldLogicalType;
+import io.github.ayongbox.daos.core.metadata.common.MaskType;
 import io.github.ayongbox.daos.core.metadata.common.MetadataStatus;
 import io.github.ayongbox.daos.core.metadata.common.ResourceType;
 import io.github.ayongbox.daos.core.metadata.common.SortDirection;
@@ -23,6 +24,7 @@ import io.github.ayongbox.daos.core.metadata.field.FieldUiHint;
 import io.github.ayongbox.daos.core.metadata.field.SchemaField;
 import io.github.ayongbox.daos.core.metadata.permission.DataScope;
 import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
+import io.github.ayongbox.daos.core.metadata.permission.MaskRule;
 import io.github.ayongbox.daos.core.metadata.permission.PermissionSubject;
 import io.github.ayongbox.daos.core.metadata.permission.ResourceRef;
 import io.github.ayongbox.daos.core.metadata.permission.SchemaPermission;
@@ -70,15 +72,18 @@ class DataQueryServiceTest {
         dataAccess.update(SqlStatement.of(
                 "CREATE TABLE \"app_demo_users\" (\"id\" varchar(26) PRIMARY KEY, "
                         + "\"tenant_id\" varchar(36), \"deleted\" boolean NOT NULL DEFAULT FALSE, "
-                        + "\"title\" varchar(255), \"owner\" varchar(36), \"secret\" varchar(255))"));
+                        + "\"title\" varchar(255), \"owner\" varchar(36), \"secret\" varchar(255), "
+                        + "\"phone\" varchar(32))"));
         dataAccess.update(SqlStatement.of(
-                "INSERT INTO \"app_demo_users\" (\"id\", \"tenant_id\", \"deleted\", \"title\", \"owner\", \"secret\") "
-                        + "VALUES (?, ?, ?, ?, ?, ?)",
-                "1", "t1", false, "alpha", "user-1", "s1"));
+                "INSERT INTO \"app_demo_users\" "
+                        + "(\"id\", \"tenant_id\", \"deleted\", \"title\", \"owner\", \"secret\", \"phone\") "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "1", "t1", false, "alpha", "user-1", "s1", "13800138000"));
         dataAccess.update(SqlStatement.of(
-                "INSERT INTO \"app_demo_users\" (\"id\", \"tenant_id\", \"deleted\", \"title\", \"owner\", \"secret\") "
-                        + "VALUES (?, ?, ?, ?, ?, ?)",
-                "2", "t2", false, "beta", "user-2", "s2"));
+                "INSERT INTO \"app_demo_users\" "
+                        + "(\"id\", \"tenant_id\", \"deleted\", \"title\", \"owner\", \"secret\", \"phone\") "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "2", "t2", false, "beta", "user-2", "s2", "13900139000"));
 
         MetadataStore metadataStore = new InMemoryMetadataStore();
         SnapshotStore snapshotStore = new InMemorySnapshotStore();
@@ -147,6 +152,21 @@ class DataQueryServiceTest {
     }
 
     @Test
+    void masksPhoneInQueryResult() {
+        FieldMask mask = new FieldMask(
+                List.of(), List.of(), List.of(),
+                List.of(new MaskRule("f4", MaskType.PHONE, null, null)));
+        QueryRequest request = new QueryRequest(List.of("title", "phone"), null, null, 1, 20);
+
+        List<Map<String, Object>> rows = service.query(
+                APP_ID, "t1", request, context("t1", "user-1", null, mask));
+
+        assertEquals(1, rows.size());
+        assertEquals("alpha", rows.get(0).get("title"));
+        assertEquals("138****8000", rows.get(0).get("phone"));
+    }
+
+    @Test
     void rejectsAppWithoutActiveRelease() {
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> service.query("app-missing", "t1", listTitles,
@@ -174,13 +194,14 @@ class DataQueryServiceTest {
         SchemaField title = field("f1", "title");
         SchemaField owner = field("f2", "owner");
         SchemaField secret = field("f3", "secret");
+        SchemaField phone = field("f4", "phone");
 
         SchemaTable users = new SchemaTable(
                 "t1", APP_ID, TableOwnership.APPLICATION, false,
                 StorageMode.PHYSICAL, List.of(), null,
                 "users", "用户", null, null, null, null, 0,
                 TableKind.MAIN, MetadataStatus.PUBLISHED, false, null, List.of(), null,
-                SortDirection.ASC, TableOptions.defaults(), List.of(title, owner, secret),
+                SortDirection.ASC, TableOptions.defaults(), List.of(title, owner, secret, phone),
                 List.of(), List.<RelationDef>of(), Map.of(),
                 "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
 

@@ -12,6 +12,7 @@ import io.github.ayongbox.daos.core.metadata.common.DataScopeType;
 import io.github.ayongbox.daos.core.metadata.common.EffectType;
 import io.github.ayongbox.daos.core.metadata.common.FieldLogicalType;
 import io.github.ayongbox.daos.core.metadata.common.LogicOperator;
+import io.github.ayongbox.daos.core.metadata.common.MaskType;
 import io.github.ayongbox.daos.core.metadata.common.MetadataStatus;
 import io.github.ayongbox.daos.core.metadata.common.ResourceType;
 import io.github.ayongbox.daos.core.metadata.common.SortDirection;
@@ -27,6 +28,7 @@ import io.github.ayongbox.daos.core.metadata.field.SchemaField;
 import io.github.ayongbox.daos.core.metadata.permission.ConditionItem;
 import io.github.ayongbox.daos.core.metadata.permission.DataScope;
 import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
+import io.github.ayongbox.daos.core.metadata.permission.MaskRule;
 import io.github.ayongbox.daos.core.metadata.permission.PermissionSubject;
 import io.github.ayongbox.daos.core.metadata.permission.ResourceRef;
 import io.github.ayongbox.daos.core.metadata.permission.RowCondition;
@@ -291,6 +293,27 @@ class PermissionRewriterTest {
                 () -> rewrite(request("title"), context(List.of(allow("p1", null, condition, null)))));
 
         assertTrue(error.getMessage().contains("all_of"));
+    }
+
+    @Test
+    void mergesFieldMasksAcrossAllowRules() {
+        FieldMask first = new FieldMask(
+                List.of("f_secret"), List.of("f_title"), List.of(),
+                List.of(new MaskRule("f_owner", MaskType.PHONE, null, null)));
+        FieldMask second = new FieldMask(
+                List.of(), List.of(), List.of("f_dept"),
+                List.of(new MaskRule("f_owner", MaskType.EMAIL, null, null)));
+
+        FieldMask merged = rewriter.effectiveFieldMask(
+                schema, schema.requireTable("t1"),
+                context(List.of(allow("p1", null, null, first), allow("p2", null, null, second))),
+                NOW);
+
+        assertEquals(List.of("f_secret"), merged.hiddenFieldIds());
+        assertEquals(List.of("f_title"), merged.readonlyFieldIds());
+        assertEquals(List.of("f_dept"), merged.requiredFieldIds());
+        assertEquals(1, merged.maskRules().size());
+        assertEquals(MaskType.PHONE, merged.maskRules().get(0).type());
     }
 
     private SqlStatement rewrite(QueryRequest request, PermissionContext permissions) {
