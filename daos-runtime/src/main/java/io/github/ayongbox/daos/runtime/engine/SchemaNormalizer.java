@@ -1,10 +1,13 @@
 package io.github.ayongbox.daos.runtime.engine;
 
 import io.github.ayongbox.daos.core.ir.IrColumn;
+import io.github.ayongbox.daos.core.ir.IrForm;
 import io.github.ayongbox.daos.core.ir.IrTable;
 import io.github.ayongbox.daos.core.ir.NormalizedSchema;
 import io.github.ayongbox.daos.core.metadata.field.FieldConfig;
 import io.github.ayongbox.daos.core.metadata.field.SchemaField;
+import io.github.ayongbox.daos.core.metadata.form.FormField;
+import io.github.ayongbox.daos.core.metadata.form.SchemaForm;
 import io.github.ayongbox.daos.core.metadata.table.RelationDef;
 import io.github.ayongbox.daos.core.metadata.table.SchemaTable;
 
@@ -47,6 +50,16 @@ public final class SchemaNormalizer {
             long releaseVersion,
             List<SchemaTable> tables) {
 
+        return normalize(appCode, snapshotId, releaseVersion, tables, List.of());
+    }
+
+    public NormalizedSchema normalize(
+            String appCode,
+            String snapshotId,
+            long releaseVersion,
+            List<SchemaTable> tables,
+            List<SchemaForm> forms) {
+
         Objects.requireNonNull(appCode, "appCode");
         Objects.requireNonNull(snapshotId, "snapshotId");
 
@@ -87,9 +100,13 @@ public final class SchemaNormalizer {
 
         validateRelations(tablesById);
 
+        Map<String, IrForm> formsById = new LinkedHashMap<>();
+        Map<String, IrForm> formsByCode = new LinkedHashMap<>();
+        validateForms(appId, tablesById, forms, formsById, formsByCode);
+
         return new NormalizedSchema(
                 appId, appCode, snapshotId, releaseVersion,
-                tablesById, tablesByCode, sortDerivedFields(tables));
+                tablesById, tablesByCode, formsById, formsByCode, sortDerivedFields(tables));
     }
 
     private void validateTable(String appId, SchemaTable table) {
@@ -180,6 +197,71 @@ public final class SchemaNormalizer {
         if (table.columnByFieldId(fieldId) == null) {
             throw new SchemaNormalizeException(
                     "关联 " + relationCode + " 的" + role + "不存在于表 " + table.tableCode() + ": " + fieldId);
+        }
+    }
+
+    private void validateForms(
+            String appId,
+            Map<String, IrTable> tablesById,
+            List<SchemaForm> forms,
+            Map<String, IrForm> formsById,
+            Map<String, IrForm> formsByCode) {
+
+        if (forms == null) {
+            return;
+        }
+        for (SchemaForm form : forms) {
+            if (!Objects.equals(appId, form.appId())) {
+                throw new SchemaNormalizeException(
+                        "表单 " + form.code() + " 的 appId 与应用不一致: " + form.appId());
+            }
+            IrTable table = tablesById.get(form.tableId());
+            if (table == null) {
+                throw new SchemaNormalizeException(
+                        "表单 " + form.code() + " 指向不存在的表: " + form.tableId());
+            }
+            if (formsById.containsKey(form.id())) {
+                throw new SchemaNormalizeException("表单 id 重复: " + form.id());
+            }
+            if (formsByCode.containsKey(form.code())) {
+                throw new SchemaNormalizeException("表单编码重复: " + form.code());
+            }
+
+            Set<String> formFieldIds = new HashSet<>();
+            validateFormFields(table, tablesById, form.code(), form.fields(), formFieldIds);
+            IrForm irForm = new IrForm(form, table.tableCode());
+            formsById.put(form.id(), irForm);
+            formsByCode.put(form.code(), irForm);
+        }
+    }
+
+    private void validateFormFields(
+            IrTable table,
+            Map<String, IrTable> tablesById,
+            String formCode,
+            List<FormField> fields,
+            Set<String> formFieldIds) {
+
+        for (FormField field : fields) {
+            if (!formFieldIds.add(field.id())) {
+                throw new SchemaNormalizeException(
+                        "表单 " + formCode + " 存在重复表单项 id: " + field.id());
+            }
+            if (field.fieldId() != null && table.columnByFieldId(field.fieldId()) == null) {
+                throw new SchemaNormalizeException(
+                        "表单 " + formCode + " 的表单项 " + field.id()
+                                + " 指向表 " + table.tableCode() + " 中不存在的字段: " + field.fieldId());
+            }
+            if (!field.subformFields().isEmpty()) {
+                IrTable subformTable = tablesById.get(field.subformTableId());
+                if (subformTable == null) {
+                    throw new SchemaNormalizeException(
+                            "表单 " + formCode + " 的子表单 " + field.id()
+                                    + " 指向不存在的表: " + field.subformTableId());
+                }
+                validateFormFields(subformTable, tablesById, formCode, field.subformFields(), formFieldIds);
+            }
+            validateFormFields(table, tablesById, formCode, field.children(), formFieldIds);
         }
     }
 

@@ -1,0 +1,148 @@
+package io.github.ayongbox.daos.runtime.engine.render;
+
+import io.github.ayongbox.daos.core.ir.IrColumn;
+import io.github.ayongbox.daos.core.ir.IrForm;
+import io.github.ayongbox.daos.core.ir.IrTable;
+import io.github.ayongbox.daos.core.ir.NormalizedSchema;
+import io.github.ayongbox.daos.core.ir.RenderTree;
+import io.github.ayongbox.daos.core.ir.RenderTree.RenderNode;
+import io.github.ayongbox.daos.core.metadata.common.FormScene;
+import io.github.ayongbox.daos.core.metadata.form.FormField;
+import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
+import io.github.ayongbox.daos.core.metadata.permission.MaskRule;
+import io.github.ayongbox.daos.core.pipeline.render.RenderCompiler;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * 默认渲染树编译器。只读归一化 IR，输出与权限快照绑定的渲染树。
+ *
+ * <p>编译期完成全部裁剪：隐藏字段不进入产物，只读与必填已合并权限快照，
+ * 脱敏规则写入节点属性供前端展示。运行期与前端都不允许再次放宽权限。</p>
+ */
+public final class DefaultRenderCompiler implements RenderCompiler {
+
+    @Override
+    public RenderTree compile(
+            NormalizedSchema schema,
+            String formId,
+            FormScene scene,
+            FieldMask fieldMask) {
+
+        Objects.requireNonNull(schema, "schema");
+        Objects.requireNonNull(formId, "formId");
+
+        FormScene resolvedScene = scene == null ? FormScene.VIEW : scene;
+        FieldMask mask = fieldMask == null ? FieldMask.empty() : fieldMask;
+
+        IrForm form = schema.requireForm(formId);
+        IrTable table = schema.requireTable(form.tableId());
+        List<RenderNode> nodes = renderFields(schema, table, form.source().fields(), mask);
+
+        return new RenderTree(formId, resolvedScene, form.source().schemaVersion(), nodes);
+    }
+
+    private List<RenderNode> renderFields(
+            NormalizedSchema schema,
+            IrTable table,
+            List<FormField> fields,
+            FieldMask mask) {
+
+        List<RenderNode> nodes = new ArrayList<>(fields.size());
+        for (FormField field : fields) {
+            RenderNode node = renderField(schema, table, field, mask);
+            if (node != null) {
+                nodes.add(node);
+            }
+        }
+        return nodes;
+    }
+
+    private RenderNode renderField(
+            NormalizedSchema schema,
+            IrTable table,
+            FormField field,
+            FieldMask mask) {
+
+        String fieldId = field.fieldId();
+        if (field.hidden() || (fieldId != null && mask.hidden(fieldId))) {
+            return null;
+        }
+
+        IrColumn column = fieldId == null ? null : table.columnByFieldId(fieldId);
+        boolean readonly = field.readonly() || (fieldId != null && mask.readonly(fieldId));
+        boolean required = fieldId != null
+                && (mask.requiredFieldIds().contains(fieldId)
+                || Boolean.TRUE.equals(field.requiredOverride())
+                || (column != null && column.source().constraints().required()));
+
+        List<RenderNode> children;
+        if (!field.subformFields().isEmpty()) {
+            IrTable subformTable = schema.requireTable(field.subformTableId());
+            children = renderFields(schema, subformTable, field.subformFields(), mask);
+        } else {
+            children = renderFields(schema, table, field.children(), mask);
+        }
+
+        if (field.component().container() && children.isEmpty()) {
+            return null;
+        }
+
+        String label = labelOf(field, column);
+        return new RenderNode(
+                field.id(),
+                field.component().code(),
+                column == null ? null : column.fieldCode(),
+                label,
+                field.span(),
+                readonly,
+                required,
+                false,
+                propsOf(field, fieldId, mask),
+                children);
+    }
+
+    private String labelOf(FormField field, IrColumn column) {
+        if (field.label() != null && !field.label().isBlank()) {
+            return field.label();
+        }
+        return column == null ? null : column.source().displayName();
+    }
+
+    private Map<String, Object> propsOf(FormField field, String fieldId, FieldMask mask) {
+        Map<String, Object> props = new LinkedHashMap<>(field.props());
+        putIfPresent(props, "placeholder", field.placeholder());
+        putIfPresent(props, "helpText", field.helpText());
+        putIfPresent(props, "tooltip", field.tooltip());
+        if (field.defaultValue() != null) {
+            props.put("defaultValue", field.defaultValue());
+        }
+        if (fieldId != null) {
+            maskRuleOf(mask, fieldId).ifPresent(rule -> putMaskRule(props, rule));
+        }
+        return props;
+    }
+
+    private Optional<MaskRule> maskRuleOf(FieldMask mask, String fieldId) {
+        return mask.maskRules().stream()
+                .filter(rule -> rule.fieldId().equals(fieldId))
+                .findFirst();
+    }
+
+    private void putMaskRule(Map<String, Object> props, MaskRule rule) {
+        props.put("maskType", rule.type().name());
+        putIfPresent(props, "maskPattern", rule.pattern());
+        putIfPresent(props, "maskReplacement", rule.replacement());
+    }
+
+    private void putIfPresent(Map<String, Object> props, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            props.put(key, value);
+        }
+    }
+}

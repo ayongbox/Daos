@@ -14,6 +14,10 @@ import io.github.ayongbox.daos.core.metadata.field.FieldConfig;
 import io.github.ayongbox.daos.core.metadata.field.FieldConstraints;
 import io.github.ayongbox.daos.core.metadata.field.FieldUiHint;
 import io.github.ayongbox.daos.core.metadata.field.SchemaField;
+import io.github.ayongbox.daos.core.metadata.form.FormComponent;
+import io.github.ayongbox.daos.core.metadata.form.FormField;
+import io.github.ayongbox.daos.core.metadata.form.FormType;
+import io.github.ayongbox.daos.core.metadata.form.SchemaForm;
 import io.github.ayongbox.daos.core.metadata.table.RelationDef;
 import io.github.ayongbox.daos.core.metadata.table.SchemaTable;
 import io.github.ayongbox.daos.core.metadata.table.TableOptions;
@@ -141,6 +145,56 @@ class SchemaNormalizerTest {
         assertEquals(IrColumn.Storage.JSON_MEMBER,
                 schema.requireTable("t1").requireColumn("amount").storage());
         assertEquals(0, schema.requireTable("t1").physicalColumns().size());
+    }
+
+    @Test
+    void indexesFormsAndResolvesTableCode() {
+        SchemaTable users = table("t1", "users", List.of(text("t1", "f1", "name")), List.of());
+        SchemaForm form = form("form-1", "basic", "t1",
+                List.of(formField("n1", "f1", FormComponent.INPUT, List.of())));
+
+        NormalizedSchema schema = normalizer.normalize(
+                "demo", "snap-1", 1L, List.of(users), List.of(form));
+
+        assertEquals("users", schema.requireForm("form-1").tableCode());
+        assertEquals("t1", schema.requireFormByCode("basic").tableId());
+    }
+
+    @Test
+    void rejectsFormFieldNotBelongingToTable() {
+        SchemaTable users = table("t1", "users", List.of(text("t1", "f1", "name")), List.of());
+        SchemaForm form = form("form-1", "basic", "t1",
+                List.of(formField("n1", "f9", FormComponent.INPUT, List.of())));
+
+        SchemaNormalizeException error = assertThrows(SchemaNormalizeException.class,
+                () -> normalizer.normalize("demo", "snap-1", 1L, List.of(users), List.of(form)));
+
+        assertTrue(error.getMessage().contains("不存在的字段"));
+    }
+
+    @Test
+    void rejectsFormPointingToMissingTable() {
+        SchemaTable users = table("t1", "users", List.of(text("t1", "f1", "name")), List.of());
+        SchemaForm form = form("form-1", "basic", "t9", List.of());
+
+        assertThrows(SchemaNormalizeException.class,
+                () -> normalizer.normalize("demo", "snap-1", 1L, List.of(users), List.of(form)));
+    }
+
+    private static FormField formField(
+            String id, String fieldId, FormComponent component, List<FormField> children) {
+        return new FormField(
+                id, fieldId, component, null, 24, 0, 0, null, null, null,
+                false, false, false, null, null, Map.of(), Map.of(), children,
+                null, List.of(), 0, 0, true, true, true, true, false, Map.of(),
+                null, null, false, false, 2);
+    }
+
+    private static SchemaForm form(String id, String code, String tableId, List<FormField> fields) {
+        return new SchemaForm(
+                id, APP_ID, tableId, code, code, null, FormType.RECORD, Map.of(),
+                fields, List.of(), List.of(), List.of(), MetadataStatus.PUBLISHED, 1, Map.of(),
+                "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
     }
 
     private static SchemaField text(String tableId, String id, String code) {

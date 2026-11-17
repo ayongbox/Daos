@@ -45,7 +45,7 @@ public final class PublishService {
         String snapshotId = Ids.ulid();
 
         // 发布前必须通过归一化，非法结构在这里阻断，不会留下半成品快照。
-        normalizer.normalize(draft.code(), snapshotId, releaseVersion, draft.tables());
+        normalizer.normalize(draft.code(), snapshotId, releaseVersion, draft.tables(), draft.forms());
 
         String contentHash = contentHasher.hash(draft);
         Optional<SchemaSnapshot> active = snapshotStore.findActive(appId);
