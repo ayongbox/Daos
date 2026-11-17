@@ -61,6 +61,20 @@ final class StandardSqlRenderer implements SqlRenderer {
         return new SqlStatement(sql.toString(), parameters);
     }
 
+    @Override
+    public SqlStatement renderCount(QueryPlan.Select select) {
+        Objects.requireNonNull(select, "select");
+        List<Object> parameters = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) AS ")
+                .append(dialect.quote("total"))
+                .append(" FROM ").append(dialect.quote(select.physicalTable()));
+        FilterNode filter = select.filter();
+        if (!(filter instanceof FilterNode.Constant constant && constant.value())) {
+            sql.append(" WHERE ").append(renderFilter(filter, parameters));
+        }
+        return new SqlStatement(sql.toString(), parameters);
+    }
+
     private void appendItems(StringBuilder sql, List<QueryPlan.SelectItem> items) {
         if (items.isEmpty()) {
             sql.append('*');

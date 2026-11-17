@@ -106,7 +106,7 @@ public final class AuthenticationService {
         String token = newToken();
         Instant now = Instant.now(clock);
         Session session = new Session(
-                Ids.ulid(), tenantId, account.id(), sha256(token),
+                Ids.ulid(), tenantId, account.id(), account.username(), account.memberId(), sha256(token),
                 now, now.plus(ttl), clientIp, userAgent);
         sessionStore.save(session);
         recordLogin(tenantId, account.id(), AuditOutcome.SUCCESS, null, username, clientIp, userAgent);

@@ -14,6 +14,11 @@ public interface SqlRenderer {
     SqlStatement render(QueryPlan plan);
 
     /**
+     * 渲染同一查询条件的总数语句，忽略投影、排序与分页。
+     */
+    SqlStatement renderCount(QueryPlan.Select select);
+
+    /**
      * 渲染独立的 WHERE 条件。写入语句复用查询侧的条件语法，禁止各自拼接。
      */
     SqlStatement renderPredicate(FilterNode filter);

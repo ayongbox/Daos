@@ -45,9 +45,9 @@ class AuthenticationServiceTest {
         auditStore = new InMemoryAuditStore();
         clock = new MutableClock(START);
         accountStore.save(new Account(
-                "acc-1", TENANT, "alice", "Alice", hasher.hash("secret-123"), true));
+                "acc-1", TENANT, "alice", "Alice", hasher.hash("secret-123"), "m-1", true));
         accountStore.save(new Account(
-                "acc-2", TENANT, "bob", "Bob", hasher.hash("secret-123"), false));
+                "acc-2", TENANT, "bob", "Bob", hasher.hash("secret-123"), "m-2", false));
 
         service = new AuthenticationService(
                 accountStore, new InMemorySessionStore(), hasher,

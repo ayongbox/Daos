@@ -78,6 +78,7 @@ class DataQueryServiceTest {
         dataAccess.update(SqlStatement.of(
                 "CREATE TABLE \"app_demo_users\" (\"id\" varchar(26) PRIMARY KEY, "
                         + "\"tenant_id\" varchar(36), \"deleted\" boolean NOT NULL DEFAULT FALSE, "
+                        + "\"version\" bigint NOT NULL DEFAULT 0, "
                         + "\"title\" varchar(255), \"owner\" varchar(36), \"secret\" varchar(255), "
                         + "\"phone\" varchar(32))"));
         dataAccess.update(SqlStatement.of(

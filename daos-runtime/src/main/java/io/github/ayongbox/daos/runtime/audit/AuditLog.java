@@ -33,14 +33,20 @@ public final class AuditLog {
 
     private final AuditStore store;
     private final Clock clock;
+    private final TraceIdSupplier traceIdSupplier;
 
     public AuditLog(AuditStore store) {
-        this(store, Clock.systemUTC());
+        this(store, Clock.systemUTC(), () -> null);
     }
 
     public AuditLog(AuditStore store, Clock clock) {
+        this(store, clock, () -> null);
+    }
+
+    public AuditLog(AuditStore store, Clock clock, TraceIdSupplier traceIdSupplier) {
         this.store = Objects.requireNonNull(store, "store");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.traceIdSupplier = Objects.requireNonNull(traceIdSupplier, "traceIdSupplier");
     }
 
     public static AuditLog noop() {
@@ -71,7 +77,8 @@ public final class AuditLog {
             Map<String, Object> detail) {
         store.append(new AuditEvent(
                 Ids.ulid(), tenantId, appId, subjectId, action, resourceType, resourceId,
-                outcome, message, null, null, null, Instant.now(clock), detail));
+                outcome, message, null, null, traceIdSupplier.currentTraceId(),
+                Instant.now(clock), detail));
     }
 
     /**

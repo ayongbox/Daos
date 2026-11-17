@@ -104,7 +104,31 @@ web → runtime/data（写入）→ runtime/flow（Flowable）→ 任务
 
 ## 公共规则
 
-1. 所有链路入口统一鉴权，租户上下文由网关层或过滤器注入，业务代码不手工解析；
+1. 主体与租户只来自登录会话（`SessionAuthInterceptor`），禁止信任 `X-User-Id` 之类可伪造请求头；
 2. 所有写操作幂等键由请求携带，重复提交返回同一结果；
 3. 跨模块调用只走公开接口，禁止直接访问对方 `infra`；
 4. 链路内出现的缓存失效、事件投递均为最终一致，失败进重试与死信。
+
+## 五、与 Baseon 的契约边界
+
+Daos 以 BOM + starter 的方式消费 Baseon，并在 Web 契约上与其保持一致：
+
+| 项 | 约定 |
+|---|---|
+| 响应体 | Controller 统一返回 `R<T>`，分页用 `PageQuery` / `PageResult` |
+| 异常 | Daos 领域异常由 `ApiExceptionHandler` 映射为 `R` 错误码；其余异常交给 Baseon `GlobalExceptionHandler`，不并存两套格式 |
+| 登录上下文 | 会话拦截器写入 Baseon `LoginUser`，供日志、审计与 `SecurityUtil` 读取 |
+| 链路 id | 审计事件通过 `TraceIdSupplier` 读取 `baseon-starter-trace` 的 traceId |
+| 用户上下文请求头 | `baseon.web.user-context.enabled=false`，身份只来自会话 |
+
+刻意保留的边界：
+
+- **权限裁决唯一归属 Daos 引擎**：不启用 `baseon-starter-tenant` / `data-scope` 对动态表的自动 SQL 改写，避免与 `PermissionRewriter` 双过滤；
+- **动态表直连 JDBC**：低代码表在运行期建立，没有 MyBatis-Plus 实体，DDL 与通用查询走方言渲染；
+- **权限是应用级语义**：数据范围、行级条件、字段脱敏由 `PermissionContext` 承载，不映射为全局权限串。
+
+已知契约不匹配（作为对 Baseon 的反馈）：
+
+1. `LoginUser` 的用户与租户 id 为 `Long`，Daos 使用 ULID 与字符串租户，桥接时只能写入用户名；
+2. Baseon `PermissionChecker` 接收全局权限串（`resource:action`），缺少应用维度，无法直接表达 Daos 的应用级权限；
+3. `@RequiresPermission` 在控制器解析权限上下文之前执行，尚不能用于数据接口，需在平台级权限点出现后再接线。

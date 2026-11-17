@@ -39,6 +39,15 @@
             <groupId>io.github.ayongbox</groupId>
             <artifactId>baseon-starter-log</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.github.ayongbox</groupId>
+            <artifactId>baseon-starter-trace</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
 
     <build>

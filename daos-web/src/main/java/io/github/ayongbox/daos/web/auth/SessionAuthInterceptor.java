@@ -1,9 +1,12 @@
 package io.github.ayongbox.daos.web.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.ayongbox.baseon.core.context.SecurityUtil;
+import io.github.ayongbox.baseon.core.model.CommonErrorCode;
+import io.github.ayongbox.baseon.core.model.LoginUser;
+import io.github.ayongbox.baseon.core.model.R;
 import io.github.ayongbox.daos.core.auth.Session;
 import io.github.ayongbox.daos.runtime.auth.AuthenticationService;
-import io.github.ayongbox.daos.web.support.ApiError;
 import io.github.ayongbox.daos.web.support.BearerTokens;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -44,11 +47,32 @@ public final class SessionAuthInterceptor implements HandlerInterceptor {
         if (session.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json;charset=UTF-8");
-            objectMapper.writeValue(response.getWriter(), new ApiError("UNAUTHORIZED", "未登录或会话已过期"));
+            objectMapper.writeValue(response.getWriter(),
+                    R.fail(CommonErrorCode.UNAUTHORIZED.getCode(), "未登录或会话已过期"));
             return false;
         }
         request.setAttribute(SESSION_ATTRIBUTE, session.get());
+        bindBaseonLoginUser(session.get());
         return true;
+    }
+
+    @Override
+    public void afterCompletion(
+            HttpServletRequest request, HttpServletResponse response, Object handler, Exception exception) {
+        SecurityUtil.clear();
+    }
+
+    /**
+     * 同步写入 Baseon 登录上下文，供其日志、审计与 {@code SecurityUtil} 读取。
+     *
+     * <p>Baseon 的 {@code LoginUser} 用 Long 承载用户与租户 id，而 Daos 使用 ULID 与字符串租户，
+     * 因此只写入用户名；权限是应用级语义，不能塞进全局权限集合。</p>
+     */
+    private static void bindBaseonLoginUser(Session session) {
+        LoginUser user = new LoginUser();
+        user.setUsername(session.username());
+        user.setPermissions(Set.of());
+        SecurityUtil.set(user);
     }
 
     private static String servletPath(HttpServletRequest request) {

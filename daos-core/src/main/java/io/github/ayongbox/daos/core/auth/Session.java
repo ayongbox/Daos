@@ -10,6 +10,8 @@ public record Session(
         String sessionId,
         String tenantId,
         String subjectId,
+        String username,
+        String memberId,
         String tokenHash,
         Instant issuedAt,
         Instant expiresAt,

@@ -22,6 +22,7 @@ import io.github.ayongbox.daos.runtime.permission.PermissionRewriteException;
 import io.github.ayongbox.daos.runtime.permission.PermissionRewriter;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -37,6 +38,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * 查询结果再由 {@link FieldMasker} 按字段掩码脱敏，本类不手工拼接权限条件。</p>
  */
 public final class DataQueryService {
+
+    private static final String ID_COLUMN = "id";
+    private static final String VERSION_COLUMN = "version";
 
     private final SnapshotStore snapshotStore;
     private final DataAccessFacade dataAccess;
@@ -102,6 +106,32 @@ public final class DataQueryService {
 
     public List<Map<String, Object>> query(
             String appId, String tableId, QueryRequest request, PermissionContext permissions) {
+        Rewritten rewritten = rewrite(appId, tableId, request, permissions);
+        SqlStatement statement = dialect.query().render(withIdentity(rewritten.select()));
+        List<Map<String, Object>> rows = fieldMasker.apply(
+                rewritten.table(), rewritten.mask(), dataAccess.query(statement));
+        auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
+                AuditAction.READ, ResourceType.TABLE, tableId, AuditOutcome.SUCCESS, null,
+                Map.of("tableCode", rewritten.table().tableCode(), "rowCount", rows.size()));
+        return rows;
+    }
+
+    /**
+     * 与 query 使用完全相同的租户、软删与权限条件统计总数，供分页返回。
+     */
+    public long count(
+            String appId, String tableId, QueryRequest request, PermissionContext permissions) {
+        Rewritten rewritten = rewrite(appId, tableId, request, permissions);
+        List<Map<String, Object>> rows = dataAccess.query(dialect.query().renderCount(rewritten.select()));
+        if (rows.isEmpty()) {
+            return 0L;
+        }
+        Object total = rows.get(0).values().iterator().next();
+        return total instanceof Number number ? number.longValue() : 0L;
+    }
+
+    private Rewritten rewrite(
+            String appId, String tableId, QueryRequest request, PermissionContext permissions) {
         Objects.requireNonNull(appId, "appId");
         Objects.requireNonNull(tableId, "tableId");
         Objects.requireNonNull(request, "request");
@@ -117,25 +147,34 @@ public final class DataQueryService {
         }
         IrTable table = schema.requireTable(tableId);
         Instant now = Instant.now();
-        QueryPlan.Select rewritten;
-        FieldMask mask;
         try {
-            rewritten = permissionRewriter.rewrite(
+            QueryPlan.Select rewritten = permissionRewriter.rewrite(
                     schema, table, select, request, permissions, now);
-            mask = permissionRewriter.effectiveFieldMask(schema, table, permissions, now);
+            FieldMask mask = permissionRewriter.effectiveFieldMask(schema, table, permissions, now);
+            return new Rewritten(rewritten, table, mask);
         } catch (PermissionRewriteException error) {
             auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
                     AuditAction.READ, ResourceType.TABLE, tableId, AuditOutcome.DENIED,
                     error.getMessage(), Map.of("tableCode", table.tableCode()));
             throw error;
         }
+    }
 
-        SqlStatement statement = dialect.query().render(rewritten);
-        List<Map<String, Object>> rows = fieldMasker.apply(table, mask, dataAccess.query(statement));
-        auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
-                AuditAction.READ, ResourceType.TABLE, tableId, AuditOutcome.SUCCESS, null,
-                Map.of("tableCode", table.tableCode(), "rowCount", rows.size()));
-        return rows;
+    private record Rewritten(QueryPlan.Select select, IrTable table, FieldMask mask) {
+    }
+
+    /**
+     * 查询结果始终附带记录主键与版本号，前端据此编辑与乐观锁更新。
+     * 两者是系统列，不参与字段权限与投影校验。
+     */
+    private static QueryPlan.Select withIdentity(QueryPlan.Select select) {
+        List<QueryPlan.SelectItem> items = new ArrayList<>(select.items().size() + 2);
+        items.addAll(select.items());
+        items.add(new QueryPlan.SelectItem(ID_COLUMN, ID_COLUMN));
+        items.add(new QueryPlan.SelectItem(VERSION_COLUMN, VERSION_COLUMN));
+        return new QueryPlan.Select(
+                select.physicalTable(), items, select.filter(), select.orderBy(),
+                select.limit(), select.offset());
     }
 
     private NormalizedSchema schemaOf(SchemaSnapshot snapshot) {

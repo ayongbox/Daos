@@ -35,7 +35,7 @@ class AuthControllerTest {
     void setUp() {
         Pbkdf2PasswordHasher hasher = new Pbkdf2PasswordHasher(100_000);
         InMemoryAccountStore accountStore = new InMemoryAccountStore();
-        accountStore.save(new Account("acc-1", TENANT, "alice", "Alice", hasher.hash("secret-123"), true));
+        accountStore.save(new Account("acc-1", TENANT, "alice", "Alice", hasher.hash("secret-123"), "m-1", true));
 
         AuthenticationService service = new AuthenticationService(
                 accountStore, new InMemorySessionStore(), hasher,
@@ -53,15 +53,16 @@ class AuthControllerTest {
 
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tenantId").value(TENANT))
-                .andExpect(jsonPath("$.subjectId").value("acc-1"));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.tenantId").value(TENANT))
+                .andExpect(jsonPath("$.data.subjectId").value("acc-1"));
     }
 
     @Test
     void meWithoutTokenIsRejected() throws Exception {
         mvc.perform(get("/api/auth/me"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("UNAUTHORIZED"));
+                .andExpect(jsonPath("$.code").value(1002));
     }
 
     @Test
@@ -70,7 +71,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"tenantId\":\"t1\",\"username\":\"alice\",\"password\":\"bad\"}"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.message").value("账号或密码错误"));
+                .andExpect(jsonPath("$.code").value(1002))
+                .andExpect(jsonPath("$.msg").value("账号或密码错误"));
     }
 
     @Test
@@ -79,7 +81,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"tenantId\":\"t1\",\"username\":\"\",\"password\":\"secret-123\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("BAD_REQUEST"));
+                .andExpect(jsonPath("$.code").value(1001));
     }
 
     @Test
@@ -87,7 +89,8 @@ class AuthControllerTest {
         String token = login();
 
         mvc.perform(post("/api/auth/logout").header("Authorization", "Bearer " + token))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
 
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized());
@@ -98,8 +101,10 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"tenantId\":\"t1\",\"username\":\"alice\",\"password\":\"secret-123\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.subjectId").value("acc-1"))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.subjectId").value("acc-1"))
                 .andReturn();
-        return objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("data").get("token").asText();
     }
 }

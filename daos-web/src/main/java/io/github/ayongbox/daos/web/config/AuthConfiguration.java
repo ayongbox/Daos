@@ -3,15 +3,26 @@ package io.github.ayongbox.daos.web.config;
 import io.github.ayongbox.daos.core.auth.PasswordHasher;
 import io.github.ayongbox.daos.core.common.Ids;
 import io.github.ayongbox.daos.core.metadata.identity.Account;
+import io.github.ayongbox.daos.core.metadata.identity.MemberStatus;
+import io.github.ayongbox.daos.core.metadata.identity.OrgMember;
 import io.github.ayongbox.daos.core.spi.AccountStore;
 import io.github.ayongbox.daos.core.spi.AuditStore;
+import io.github.ayongbox.daos.core.spi.IdentityStore;
 import io.github.ayongbox.daos.core.spi.SessionStore;
+import io.github.ayongbox.daos.core.spi.SnapshotStore;
 import io.github.ayongbox.daos.runtime.audit.AuditLog;
 import io.github.ayongbox.daos.runtime.audit.InMemoryAuditStore;
 import io.github.ayongbox.daos.runtime.auth.AuthenticationService;
 import io.github.ayongbox.daos.runtime.auth.InMemoryAccountStore;
 import io.github.ayongbox.daos.runtime.auth.InMemorySessionStore;
 import io.github.ayongbox.daos.runtime.auth.Pbkdf2PasswordHasher;
+import io.github.ayongbox.daos.runtime.identity.InMemoryIdentityStore;
+import io.github.ayongbox.daos.runtime.identity.PermissionContextFactory;
+import io.github.ayongbox.daos.runtime.identity.SessionPermissionService;
+import io.github.ayongbox.daos.runtime.store.InMemorySnapshotStore;
+import io.github.ayongbox.baseon.core.secure.PermissionChecker;
+import io.github.ayongbox.baseon.starter.trace.TraceIdUtil;
+import io.github.ayongbox.daos.web.auth.DaosPermissionChecker;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +30,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Map;
 
 /**
  * 认证相关装配。当前使用内存仓储，持久化实现接入后替换这里的 Bean 即可。
@@ -52,7 +67,33 @@ public class AuthConfiguration {
 
     @Bean
     public AuditLog auditLog(AuditStore auditStore) {
-        return new AuditLog(auditStore);
+        return new AuditLog(auditStore, Clock.systemUTC(), TraceIdUtil::get);
+    }
+
+    @Bean
+    public IdentityStore identityStore() {
+        return new InMemoryIdentityStore(null, null, null, null);
+    }
+
+    @Bean
+    public SnapshotStore snapshotStore() {
+        return new InMemorySnapshotStore();
+    }
+
+    @Bean
+    public PermissionContextFactory permissionContextFactory(IdentityStore identityStore) {
+        return new PermissionContextFactory(identityStore);
+    }
+
+    @Bean
+    public SessionPermissionService sessionPermissionService(
+            SnapshotStore snapshotStore, PermissionContextFactory permissionContextFactory) {
+        return new SessionPermissionService(snapshotStore, permissionContextFactory);
+    }
+
+    @Bean
+    public PermissionChecker permissionChecker() {
+        return new DaosPermissionChecker();
     }
 
     @Bean
@@ -67,6 +108,7 @@ public class AuthConfiguration {
     @Bean
     public ApplicationRunner bootstrapAccount(
             AccountStore accountStore,
+            IdentityStore identityStore,
             PasswordHasher passwordHasher,
             @Value("${daos.auth.bootstrap-tenant:}") String tenantId,
             @Value("${daos.auth.bootstrap-username:}") String username,
@@ -78,8 +120,14 @@ public class AuthConfiguration {
             if (accountStore.findByUsername(tenantId, username).isPresent()) {
                 return;
             }
+            String now = Instant.now().toString();
+            OrgMember member = new OrgMember(
+                    Ids.ulid(), tenantId, username, username, null, null, null,
+                    MemberStatus.ACTIVE, Map.of(), "bootstrap", now, "bootstrap", now, false, 1);
+            identityStore.saveMember(member);
             accountStore.save(new Account(
-                    Ids.ulid(), tenantId, username, username, passwordHasher.hash(password), true));
+                    Ids.ulid(), tenantId, username, username,
+                    passwordHasher.hash(password), member.id(), true));
             log.info("已创建引导账号 {}（租户 {}）", username, tenantId);
         };
     }

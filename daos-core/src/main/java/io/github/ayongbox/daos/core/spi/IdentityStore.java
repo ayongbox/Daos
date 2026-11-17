@@ -18,9 +18,19 @@ public interface IdentityStore {
 
     Optional<OrgMember> findMember(String tenantId, String memberId);
 
+    List<OrgMember> findMembers(String tenantId);
+
     List<OrgDepartment> findDepartments(String tenantId);
 
     List<RoleDefinition> findRoles(String tenantId);
 
     List<RoleBinding> findBindings(String tenantId, String memberId);
+
+    void saveDepartment(OrgDepartment department);
+
+    void saveMember(OrgMember member);
+
+    void saveRole(RoleDefinition role);
+
+    void saveBinding(RoleBinding binding);
 }

@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:daos;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+baseon:
+  web:
+    user-context:
+      # Daos 直连部署，禁止用可伪造的请求头注入登录态；身份只来自会话拦截器
+      enabled: false
