@@ -3,6 +3,7 @@ package io.github.ayongbox.daos.core.metadata.permission;
 import io.github.ayongbox.daos.core.metadata.common.ActionType;
 import io.github.ayongbox.daos.core.metadata.common.AuditInfo;
 import io.github.ayongbox.daos.core.metadata.common.EffectType;
+import io.github.ayongbox.daos.core.metadata.resource.ResourceActionCatalog;
 
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,9 @@ public record SchemaPermission(
             throw new IllegalArgumentException("权限 " + code + " 至少需要一个动作");
         }
         actions = List.copyOf(actions);
+        for (ActionType action : actions) {
+            ResourceActionCatalog.require(resource.type(), action);
+        }
         effect = effect == null ? EffectType.ALLOW : effect;
         if (priority == 0) {
             priority = 100;

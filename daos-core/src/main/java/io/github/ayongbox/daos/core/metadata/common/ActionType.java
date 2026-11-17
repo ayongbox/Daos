@@ -20,6 +20,7 @@ public enum ActionType {
     DESIGN("design"),
     PUBLISH("publish"),
     MANAGE_MEMBER("manage_member"),
+    START("start"),
     SUBMIT("submit"),
     APPROVE("approve"),
     REJECT("reject"),
