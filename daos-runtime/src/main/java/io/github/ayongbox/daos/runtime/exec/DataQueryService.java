@@ -1,19 +1,24 @@
 package io.github.ayongbox.daos.runtime.exec;
 
+import io.github.ayongbox.daos.core.audit.AuditAction;
+import io.github.ayongbox.daos.core.audit.AuditOutcome;
 import io.github.ayongbox.daos.core.ir.IrTable;
 import io.github.ayongbox.daos.core.ir.NormalizedSchema;
 import io.github.ayongbox.daos.core.ir.PermissionContext;
 import io.github.ayongbox.daos.core.ir.QueryPlan;
 import io.github.ayongbox.daos.core.ir.QueryRequest;
 import io.github.ayongbox.daos.core.ir.SqlStatement;
+import io.github.ayongbox.daos.core.metadata.common.ResourceType;
 import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
 import io.github.ayongbox.daos.core.pipeline.dialect.SqlDialect;
 import io.github.ayongbox.daos.core.pipeline.query.QueryCompiler;
 import io.github.ayongbox.daos.core.snapshot.SchemaSnapshot;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
+import io.github.ayongbox.daos.runtime.audit.AuditLog;
 import io.github.ayongbox.daos.runtime.engine.SchemaNormalizer;
 import io.github.ayongbox.daos.runtime.engine.query.DefaultQueryCompiler;
 import io.github.ayongbox.daos.runtime.permission.FieldMasker;
+import io.github.ayongbox.daos.runtime.permission.PermissionRewriteException;
 import io.github.ayongbox.daos.runtime.permission.PermissionRewriter;
 
 import java.time.Instant;
@@ -39,12 +44,22 @@ public final class DataQueryService {
     private final QueryCompiler queryCompiler;
     private final SchemaNormalizer normalizer;
     private final PermissionRewriter permissionRewriter;
+    private final AuditLog auditLog;
     private final FieldMasker fieldMasker = new FieldMasker();
     private final Map<String, CachedSchema> schemaCache = new ConcurrentHashMap<>();
 
     public DataQueryService(SnapshotStore snapshotStore, DataAccessFacade dataAccess, SqlDialect dialect) {
         this(snapshotStore, dataAccess, dialect,
-                new DefaultQueryCompiler(), new SchemaNormalizer(), new PermissionRewriter());
+                new DefaultQueryCompiler(), new SchemaNormalizer(), new PermissionRewriter(), AuditLog.noop());
+    }
+
+    public DataQueryService(
+            SnapshotStore snapshotStore,
+            DataAccessFacade dataAccess,
+            SqlDialect dialect,
+            AuditLog auditLog) {
+        this(snapshotStore, dataAccess, dialect,
+                new DefaultQueryCompiler(), new SchemaNormalizer(), new PermissionRewriter(), auditLog);
     }
 
     public DataQueryService(
@@ -53,7 +68,8 @@ public final class DataQueryService {
             SqlDialect dialect,
             QueryCompiler queryCompiler,
             SchemaNormalizer normalizer) {
-        this(snapshotStore, dataAccess, dialect, queryCompiler, normalizer, new PermissionRewriter());
+        this(snapshotStore, dataAccess, dialect, queryCompiler, normalizer,
+                new PermissionRewriter(), AuditLog.noop());
     }
 
     public DataQueryService(
@@ -63,12 +79,25 @@ public final class DataQueryService {
             QueryCompiler queryCompiler,
             SchemaNormalizer normalizer,
             PermissionRewriter permissionRewriter) {
+        this(snapshotStore, dataAccess, dialect, queryCompiler, normalizer,
+                permissionRewriter, AuditLog.noop());
+    }
+
+    public DataQueryService(
+            SnapshotStore snapshotStore,
+            DataAccessFacade dataAccess,
+            SqlDialect dialect,
+            QueryCompiler queryCompiler,
+            SchemaNormalizer normalizer,
+            PermissionRewriter permissionRewriter,
+            AuditLog auditLog) {
         this.snapshotStore = Objects.requireNonNull(snapshotStore, "snapshotStore");
         this.dataAccess = Objects.requireNonNull(dataAccess, "dataAccess");
         this.dialect = Objects.requireNonNull(dialect, "dialect");
         this.queryCompiler = Objects.requireNonNull(queryCompiler, "queryCompiler");
         this.normalizer = Objects.requireNonNull(normalizer, "normalizer");
         this.permissionRewriter = Objects.requireNonNull(permissionRewriter, "permissionRewriter");
+        this.auditLog = Objects.requireNonNull(auditLog, "auditLog");
     }
 
     public List<Map<String, Object>> query(
@@ -88,11 +117,25 @@ public final class DataQueryService {
         }
         IrTable table = schema.requireTable(tableId);
         Instant now = Instant.now();
-        QueryPlan.Select rewritten = permissionRewriter.rewrite(
-                schema, table, select, request, permissions, now);
-        FieldMask mask = permissionRewriter.effectiveFieldMask(schema, table, permissions, now);
+        QueryPlan.Select rewritten;
+        FieldMask mask;
+        try {
+            rewritten = permissionRewriter.rewrite(
+                    schema, table, select, request, permissions, now);
+            mask = permissionRewriter.effectiveFieldMask(schema, table, permissions, now);
+        } catch (PermissionRewriteException error) {
+            auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
+                    AuditAction.READ, ResourceType.TABLE, tableId, AuditOutcome.DENIED,
+                    error.getMessage(), Map.of("tableCode", table.tableCode()));
+            throw error;
+        }
+
         SqlStatement statement = dialect.query().render(rewritten);
-        return fieldMasker.apply(table, mask, dataAccess.query(statement));
+        List<Map<String, Object>> rows = fieldMasker.apply(table, mask, dataAccess.query(statement));
+        auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
+                AuditAction.READ, ResourceType.TABLE, tableId, AuditOutcome.SUCCESS, null,
+                Map.of("tableCode", table.tableCode(), "rowCount", rows.size()));
+        return rows;
     }
 
     private NormalizedSchema schemaOf(SchemaSnapshot snapshot) {

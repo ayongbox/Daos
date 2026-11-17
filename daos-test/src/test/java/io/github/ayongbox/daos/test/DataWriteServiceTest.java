@@ -1,5 +1,8 @@
 package io.github.ayongbox.daos.test;
 
+import io.github.ayongbox.daos.core.audit.AuditAction;
+import io.github.ayongbox.daos.core.audit.AuditEvent;
+import io.github.ayongbox.daos.core.audit.AuditOutcome;
 import io.github.ayongbox.daos.core.ir.PermissionContext;
 import io.github.ayongbox.daos.core.ir.SqlStatement;
 import io.github.ayongbox.daos.core.metadata.app.SchemaApp;
@@ -28,6 +31,8 @@ import io.github.ayongbox.daos.core.metadata.table.SchemaTable;
 import io.github.ayongbox.daos.core.metadata.table.TableOptions;
 import io.github.ayongbox.daos.core.spi.MetadataStore;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
+import io.github.ayongbox.daos.runtime.audit.AuditLog;
+import io.github.ayongbox.daos.runtime.audit.InMemoryAuditStore;
 import io.github.ayongbox.daos.runtime.engine.PublishService;
 import io.github.ayongbox.daos.runtime.engine.dialect.PostgresDialect;
 import io.github.ayongbox.daos.runtime.exec.DataAccessFacade;
@@ -58,6 +63,7 @@ class DataWriteServiceTest {
 
     private DataAccessFacade dataAccess;
     private DataWriteService service;
+    private InMemoryAuditStore auditStore;
 
     @BeforeEach
     void setUp() {
@@ -80,7 +86,8 @@ class DataWriteServiceTest {
         metadataStore.saveDraft(app());
         new PublishService(metadataStore, snapshotStore).publish(APP_ID, "tester");
 
-        service = new DataWriteService(snapshotStore, dataAccess, new PostgresDialect());
+        service = new DataWriteService(
+                snapshotStore, dataAccess, new PostgresDialect(), new AuditLog(auditStore = new InMemoryAuditStore()));
     }
 
     @Test
@@ -116,6 +123,32 @@ class DataWriteServiceTest {
                 () -> service.insert(APP_ID, "t1", values("alpha", "user-1", "A1"), allPermissions(mask)));
 
         assertTrue(error.getMessage().contains("隐藏"));
+    }
+
+    @Test
+    void recordsCreateAudit() {
+        String id = service.insert(APP_ID, "t1", values("alpha", "user-1", "A1"), allPermissions(null));
+
+        List<AuditEvent> events = auditStore.recent("t1", 10);
+        assertEquals(1, events.size());
+        AuditEvent event = events.get(0);
+        assertEquals(AuditAction.CREATE, event.action());
+        assertEquals(AuditOutcome.SUCCESS, event.outcome());
+        assertEquals(id, event.resourceId());
+        assertEquals("t1", event.detail().get("tableId"));
+    }
+
+    @Test
+    void recordsDeniedCreateAudit() {
+        PermissionContext readOnly = context(null, List.of(ActionType.READ));
+
+        assertThrows(PermissionRewriteException.class,
+                () -> service.insert(APP_ID, "t1", values("alpha", "user-1", "A1"), readOnly));
+
+        List<AuditEvent> events = auditStore.recent("t1", 10);
+        assertEquals(1, events.size());
+        assertEquals(AuditOutcome.DENIED, events.get(0).outcome());
+        assertEquals(AuditAction.CREATE, events.get(0).action());
     }
 
     @Test

@@ -1,5 +1,7 @@
 package io.github.ayongbox.daos.runtime.exec;
 
+import io.github.ayongbox.daos.core.audit.AuditAction;
+import io.github.ayongbox.daos.core.audit.AuditOutcome;
 import io.github.ayongbox.daos.core.common.Ids;
 import io.github.ayongbox.daos.core.ir.FilterNode;
 import io.github.ayongbox.daos.core.ir.IrColumn;
@@ -9,11 +11,13 @@ import io.github.ayongbox.daos.core.ir.PermissionContext;
 import io.github.ayongbox.daos.core.ir.SqlStatement;
 import io.github.ayongbox.daos.core.metadata.common.ActionType;
 import io.github.ayongbox.daos.core.metadata.common.ConditionOperator;
+import io.github.ayongbox.daos.core.metadata.common.ResourceType;
 import io.github.ayongbox.daos.core.metadata.field.FieldConstraints;
 import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
 import io.github.ayongbox.daos.core.pipeline.dialect.SqlDialect;
 import io.github.ayongbox.daos.core.snapshot.SchemaSnapshot;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
+import io.github.ayongbox.daos.runtime.audit.AuditLog;
 import io.github.ayongbox.daos.runtime.engine.SchemaNormalizer;
 import io.github.ayongbox.daos.runtime.permission.PermissionRewriteException;
 import io.github.ayongbox.daos.runtime.permission.PermissionRewriter;
@@ -55,9 +59,20 @@ public final class DataWriteService {
     private final SqlDialect dialect;
     private final PermissionRewriter permissionRewriter;
     private final SchemaNormalizer normalizer;
+    private final AuditLog auditLog;
 
     public DataWriteService(SnapshotStore snapshotStore, DataAccessFacade dataAccess, SqlDialect dialect) {
-        this(snapshotStore, dataAccess, dialect, new PermissionRewriter(), new SchemaNormalizer());
+        this(snapshotStore, dataAccess, dialect,
+                new PermissionRewriter(), new SchemaNormalizer(), AuditLog.noop());
+    }
+
+    public DataWriteService(
+            SnapshotStore snapshotStore,
+            DataAccessFacade dataAccess,
+            SqlDialect dialect,
+            AuditLog auditLog) {
+        this(snapshotStore, dataAccess, dialect,
+                new PermissionRewriter(), new SchemaNormalizer(), auditLog);
     }
 
     public DataWriteService(
@@ -66,11 +81,22 @@ public final class DataWriteService {
             SqlDialect dialect,
             PermissionRewriter permissionRewriter,
             SchemaNormalizer normalizer) {
+        this(snapshotStore, dataAccess, dialect, permissionRewriter, normalizer, AuditLog.noop());
+    }
+
+    public DataWriteService(
+            SnapshotStore snapshotStore,
+            DataAccessFacade dataAccess,
+            SqlDialect dialect,
+            PermissionRewriter permissionRewriter,
+            SchemaNormalizer normalizer,
+            AuditLog auditLog) {
         this.snapshotStore = Objects.requireNonNull(snapshotStore, "snapshotStore");
         this.dataAccess = Objects.requireNonNull(dataAccess, "dataAccess");
         this.dialect = Objects.requireNonNull(dialect, "dialect");
         this.permissionRewriter = Objects.requireNonNull(permissionRewriter, "permissionRewriter");
         this.normalizer = Objects.requireNonNull(normalizer, "normalizer");
+        this.auditLog = Objects.requireNonNull(auditLog, "auditLog");
     }
 
     public String insert(
@@ -81,8 +107,16 @@ public final class DataWriteService {
         IrTable table = loaded.table();
         Instant now = Instant.now();
 
-        PermissionRewriter.WritePermission permission = permissionRewriter.resolveWrite(
-                loaded.schema(), table, permissions, ActionType.CREATE, now);
+        PermissionRewriter.WritePermission permission;
+        try {
+            permission = permissionRewriter.resolveWrite(
+                    loaded.schema(), table, permissions, ActionType.CREATE, now);
+        } catch (PermissionRewriteException error) {
+            auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
+                    AuditAction.CREATE, ResourceType.TABLE, tableId, AuditOutcome.DENIED,
+                    error.getMessage());
+            throw error;
+        }
 
         Map<String, Object> supplied = new LinkedHashMap<>(values);
         Object idValue = supplied.remove(ID_COLUMN);
@@ -124,6 +158,9 @@ public final class DataWriteService {
         String sql = "INSERT INTO " + dialect.quote(table.physicalName())
                 + " (" + names + ") VALUES (" + placeholders + ")";
         dataAccess.update(new SqlStatement(sql, new ArrayList<>(columns.values())));
+        auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
+                AuditAction.CREATE, ResourceType.TABLE, id, AuditOutcome.SUCCESS, null,
+                Map.of("tableId", tableId));
         return id;
     }
 
@@ -141,8 +178,16 @@ public final class DataWriteService {
         IrTable table = loaded.table();
         Instant now = Instant.now();
 
-        PermissionRewriter.WritePermission permission = permissionRewriter.resolveWrite(
-                loaded.schema(), table, permissions, ActionType.UPDATE, now);
+        PermissionRewriter.WritePermission permission;
+        try {
+            permission = permissionRewriter.resolveWrite(
+                    loaded.schema(), table, permissions, ActionType.UPDATE, now);
+        } catch (PermissionRewriteException error) {
+            auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
+                    AuditAction.UPDATE, ResourceType.TABLE, recordId, AuditOutcome.DENIED,
+                    error.getMessage(), Map.of("tableId", tableId));
+            throw error;
+        }
         Map<String, Object> business = businessValues(table, values, permission.fieldMask(), true);
         if (business.isEmpty()) {
             throw new PermissionRewriteException("更新表 " + table.tableCode() + " 时没有可写字段");
@@ -165,7 +210,11 @@ public final class DataWriteService {
         parameters.addAll(predicate.parameters());
         String sql = "UPDATE " + dialect.quote(table.physicalName())
                 + " SET " + set + " WHERE " + predicate.sql();
-        return requireOne(dataAccess.update(new SqlStatement(sql, parameters)), recordId);
+        int affected = requireOne(dataAccess.update(new SqlStatement(sql, parameters)), recordId);
+        auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
+                AuditAction.UPDATE, ResourceType.TABLE, recordId, AuditOutcome.SUCCESS, null,
+                Map.of("tableId", tableId));
+        return affected;
     }
 
     public int delete(
@@ -181,8 +230,16 @@ public final class DataWriteService {
         IrTable table = loaded.table();
         Instant now = Instant.now();
 
-        PermissionRewriter.WritePermission permission = permissionRewriter.resolveWrite(
-                loaded.schema(), table, permissions, ActionType.DELETE, now);
+        PermissionRewriter.WritePermission permission;
+        try {
+            permission = permissionRewriter.resolveWrite(
+                    loaded.schema(), table, permissions, ActionType.DELETE, now);
+        } catch (PermissionRewriteException error) {
+            auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
+                    AuditAction.DELETE, ResourceType.TABLE, recordId, AuditOutcome.DENIED,
+                    error.getMessage(), Map.of("tableId", tableId));
+            throw error;
+        }
         FilterNode where = recordScope(recordId, expectedVersion, permission.predicate());
         SqlStatement predicate = dialect.query().renderPredicate(where);
 
@@ -209,7 +266,11 @@ public final class DataWriteService {
                     "DELETE FROM " + dialect.quote(table.physicalName()) + " WHERE " + predicate.sql(),
                     predicate.parameters());
         }
-        return requireOne(dataAccess.update(statement), recordId);
+        int affected = requireOne(dataAccess.update(statement), recordId);
+        auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
+                AuditAction.DELETE, ResourceType.TABLE, recordId, AuditOutcome.SUCCESS, null,
+                Map.of("tableId", tableId, "softDelete", table.source().options().softDelete()));
+        return affected;
     }
 
     private FilterNode recordScope(

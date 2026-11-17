@@ -1,5 +1,8 @@
 package io.github.ayongbox.daos.test;
 
+import io.github.ayongbox.daos.core.audit.AuditAction;
+import io.github.ayongbox.daos.core.audit.AuditEvent;
+import io.github.ayongbox.daos.core.audit.AuditOutcome;
 import io.github.ayongbox.daos.core.ir.FilterNode;
 import io.github.ayongbox.daos.core.ir.PermissionContext;
 import io.github.ayongbox.daos.core.ir.QueryRequest;
@@ -33,6 +36,8 @@ import io.github.ayongbox.daos.core.metadata.table.SchemaTable;
 import io.github.ayongbox.daos.core.metadata.table.TableOptions;
 import io.github.ayongbox.daos.core.spi.MetadataStore;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
+import io.github.ayongbox.daos.runtime.audit.AuditLog;
+import io.github.ayongbox.daos.runtime.audit.InMemoryAuditStore;
 import io.github.ayongbox.daos.runtime.engine.PublishService;
 import io.github.ayongbox.daos.runtime.engine.dialect.PostgresDialect;
 import io.github.ayongbox.daos.runtime.exec.DataAccessFacade;
@@ -61,6 +66,7 @@ class DataQueryServiceTest {
 
     private DataQueryService service;
     private QueryRequest listTitles;
+    private InMemoryAuditStore auditStore;
 
     @BeforeEach
     void setUp() {
@@ -90,7 +96,8 @@ class DataQueryServiceTest {
         metadataStore.saveDraft(app());
         new PublishService(metadataStore, snapshotStore).publish(APP_ID, "tester");
 
-        service = new DataQueryService(snapshotStore, dataAccess, new PostgresDialect());
+        service = new DataQueryService(
+                snapshotStore, dataAccess, new PostgresDialect(), new AuditLog(auditStore = new InMemoryAuditStore()));
         listTitles = new QueryRequest(
                 List.of("title"), null,
                 List.of(new QueryRequest.SortSpec("title", SortDirection.ASC)), 1, 20);
@@ -164,6 +171,38 @@ class DataQueryServiceTest {
         assertEquals(1, rows.size());
         assertEquals("alpha", rows.get(0).get("title"));
         assertEquals("138****8000", rows.get(0).get("phone"));
+    }
+
+    @Test
+    void recordsSuccessfulQueryAudit() {
+        service.query(APP_ID, "t1", listTitles, context("t1", "user-1", null, null));
+
+        List<AuditEvent> events = auditStore.recent("t1", 10);
+        assertEquals(1, events.size());
+        AuditEvent event = events.get(0);
+        assertEquals(AuditAction.READ, event.action());
+        assertEquals(AuditOutcome.SUCCESS, event.outcome());
+        assertEquals("t1", event.resourceId());
+        assertEquals("app-1", event.appId());
+        assertEquals("user-1", event.subjectId());
+        assertEquals(1, event.detail().get("rowCount"));
+    }
+
+    @Test
+    void recordsDeniedQueryAudit() {
+        FieldMask mask = new FieldMask(List.of("f3"), List.of(), List.of(), List.of());
+        QueryRequest filterSecret = new QueryRequest(
+                List.of("title"),
+                new FilterNode.Compare("secret", ConditionOperator.EQ, List.of("s1")),
+                null, 1, 20);
+
+        assertThrows(PermissionRewriteException.class,
+                () -> service.query(APP_ID, "t1", filterSecret, context("t1", "user-1", null, mask)));
+
+        List<AuditEvent> events = auditStore.recent("t1", 10);
+        assertEquals(1, events.size());
+        assertEquals(AuditOutcome.DENIED, events.get(0).outcome());
+        assertEquals(AuditAction.READ, events.get(0).action());
     }
 
     @Test
