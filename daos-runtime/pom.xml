@@ -20,6 +20,10 @@
             <artifactId>daos-core</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.github.ayongbox</groupId>
             <artifactId>baseon-starter-mybatis-plus</artifactId>
         </dependency>

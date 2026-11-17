@@ -15,12 +15,14 @@ Daos/
 ├── pom.xml                        parent，统一版本与插件
 ├── daos-core/                 契约与编译
 │   └── src/main/java/io/github/ayongbox/daos/core/
-│       ├── metadata/              八类元数据模型
+│       ├── metadata/              应用、表、字段、表单、权限元数据
+│       ├── snapshot/              发布快照（不可变）
 │       ├── pipeline/              ddl / query / render 三路编译器
 │       ├── auth/                  权限裁决契约（仅接口）
 │       ├── tenant/                租户上下文契约
-│       └── spi/                   扩展点定义
-├── daos-runtime/              数据服务、查询执行、流程封装
+│       ├── common/                ULID 等无外部依赖工具
+│       └── spi/                   扩展点与仓储契约
+├── daos-runtime/              数据服务、查询执行、流程封装（engine / store / exec / permission）
 ├── daos-web/                  控制台 REST API、装配与启动
 ├── daos-license/              授权校验与版本能力
 ├── daos-ext-*/                商业扩展，闭源
