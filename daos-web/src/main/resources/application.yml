@@ -10,3 +10,12 @@ baseon:
     user-context:
       # Daos 直连部署，禁止用可伪造的请求头注入登录态；身份只来自会话拦截器
       enabled: false
+
+daos:
+  file:
+    storage: local
+    local-root: ./data/files
+    max-size: 20971520
+    signed-url-ttl: 5m
+    # 生产与多实例必须显式配置；留空则启动时生成临时密钥
+    download-secret: ${DAOS_FILE_DOWNLOAD_SECRET:}

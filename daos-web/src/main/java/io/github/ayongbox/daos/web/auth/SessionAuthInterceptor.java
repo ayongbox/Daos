@@ -26,7 +26,8 @@ public final class SessionAuthInterceptor implements HandlerInterceptor {
 
     public static final String SESSION_ATTRIBUTE = SessionAuthInterceptor.class.getName() + ".SESSION";
 
-    private static final Set<String> PUBLIC_PATHS = Set.of("/api/auth/login");
+    private static final Set<String> PUBLIC_PATHS = Set.of(
+            "/api/auth/login", "/api/files/download");
 
     private final AuthenticationService authenticationService;
     private final ObjectMapper objectMapper;
