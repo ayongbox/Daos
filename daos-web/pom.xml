@@ -49,6 +49,7 @@
                 <version>${spring-boot.version}</version>
                 <configuration>
                     <mainClass>io.github.ayongbox.daos.web.DaosApplication</mainClass>
+                    <classifier>exec</classifier>
                 </configuration>
                 <executions>
                     <execution>
