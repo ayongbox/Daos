@@ -111,6 +111,9 @@ public final class DefaultQueryCompiler implements QueryCompiler {
             return new FilterNode.IsNull(
                     requireFilterable(table, isNull.column()).physicalName(), isNull.negated());
         }
+        if (node instanceof FilterNode.Not not) {
+            return new FilterNode.Not(rewriteFilter(table, not.child()));
+        }
 
         FilterNode.Compare compare = (FilterNode.Compare) node;
         if (!LOGICAL_OPERATORS.contains(compare.operator())) {

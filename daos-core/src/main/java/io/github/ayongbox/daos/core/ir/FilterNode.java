@@ -38,6 +38,12 @@ public sealed interface FilterNode {
         }
     }
 
+    record Not(FilterNode child) implements FilterNode {
+        public Not {
+            Objects.requireNonNull(child, "child");
+        }
+    }
+
     record Constant(boolean value) implements FilterNode {
     }
 

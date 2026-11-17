@@ -96,6 +96,9 @@ final class StandardSqlRenderer implements SqlRenderer {
         if (node instanceof FilterNode.IsNull isNull) {
             return dialect.quote(isNull.column()) + (isNull.negated() ? " IS NOT NULL" : " IS NULL");
         }
+        if (node instanceof FilterNode.Not not) {
+            return "NOT (" + renderFilter(not.child(), parameters) + ")";
+        }
         return renderCompare((FilterNode.Compare) node, parameters);
     }
 

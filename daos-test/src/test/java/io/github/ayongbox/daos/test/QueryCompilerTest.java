@@ -166,6 +166,20 @@ class QueryCompilerTest {
         assertTrue(error.getMessage().contains("权限重写阶段"));
     }
 
+    @Test
+    void compilesNotNodeAndRendersNegation() {
+        QueryRequest request = new QueryRequest(
+                List.of("title"),
+                new FilterNode.Not(new FilterNode.Compare("title", ConditionOperator.EQ, List.of("x"))),
+                null, 1, 20);
+
+        QueryPlan plan = compiler.compile(schema, "t1", request, permissions);
+        SqlStatement sql = new MysqlDialect().query().render(plan);
+
+        assertEquals("SELECT `title` FROM `app_demo_users` WHERE NOT (`title` = ?) LIMIT 20", sql.sql());
+        assertEquals(List.of("x"), sql.parameters());
+    }
+
     private static SchemaTable table(
             String id,
             String code,
