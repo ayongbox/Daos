@@ -13,25 +13,18 @@ import io.github.ayongbox.daos.core.metadata.common.DataScopeType;
 import io.github.ayongbox.daos.core.metadata.common.EffectType;
 import io.github.ayongbox.daos.core.metadata.common.LogicOperator;
 import io.github.ayongbox.daos.core.metadata.common.ResourceType;
-import io.github.ayongbox.daos.core.metadata.common.SubjectType;
 import io.github.ayongbox.daos.core.metadata.permission.ConditionItem;
 import io.github.ayongbox.daos.core.metadata.permission.DataScope;
 import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
-import io.github.ayongbox.daos.core.metadata.permission.MaskRule;
-import io.github.ayongbox.daos.core.metadata.permission.PermissionSubject;
 import io.github.ayongbox.daos.core.metadata.permission.RowCondition;
 import io.github.ayongbox.daos.core.metadata.permission.SchemaPermission;
+import io.github.ayongbox.daos.runtime.permission.PermissionRuleMatcher.SubjectMatch;
 
 import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -126,7 +119,7 @@ public final class PermissionRewriter {
         List<SchemaPermission> allows = new ArrayList<>();
         List<SchemaPermission> denies = new ArrayList<>();
         collect(schema, table, permissions, action, now, allows, denies);
-        return mergeFieldMask(allows);
+        return PermissionRuleMatcher.mergeFieldMask(allows);
     }
 
     /**
@@ -161,7 +154,7 @@ public final class PermissionRewriter {
         if (!denies.isEmpty()) {
             predicates.add(new FilterNode.Not(orOf(denyPredicates(table, permissions, denies))));
         }
-        return new WritePermission(conjoin(predicates), mergeFieldMask(allows));
+        return new WritePermission(conjoin(predicates), PermissionRuleMatcher.mergeFieldMask(allows));
     }
 
     /** 写入动作的解析结果：行级范围与字段掩码。 */
@@ -171,29 +164,6 @@ public final class PermissionRewriter {
             Objects.requireNonNull(predicate, "predicate");
             Objects.requireNonNull(fieldMask, "fieldMask");
         }
-    }
-
-    private FieldMask mergeFieldMask(List<SchemaPermission> allows) {
-        Set<String> hidden = new LinkedHashSet<>();
-        Set<String> readonly = new LinkedHashSet<>();
-        Set<String> required = new LinkedHashSet<>();
-        Map<String, MaskRule> masks = new LinkedHashMap<>();
-
-        List<SchemaPermission> ordered = allows.stream()
-                .sorted(Comparator.comparingInt(SchemaPermission::priority).reversed()
-                        .thenComparing(SchemaPermission::code))
-                .toList();
-        for (SchemaPermission rule : ordered) {
-            FieldMask mask = rule.fieldMask();
-            hidden.addAll(mask.hiddenFieldIds());
-            readonly.addAll(mask.readonlyFieldIds());
-            required.addAll(mask.requiredFieldIds());
-            for (MaskRule maskRule : mask.maskRules()) {
-                masks.putIfAbsent(maskRule.fieldId(), maskRule);
-            }
-        }
-        return new FieldMask(
-                List.copyOf(hidden), List.copyOf(readonly), List.copyOf(required), List.copyOf(masks.values()));
     }
 
     private void collect(
@@ -206,7 +176,7 @@ public final class PermissionRewriter {
             List<SchemaPermission> denies) {
 
         for (SchemaPermission rule : permissions.permissions()) {
-            if (!rule.enabled() || rule.deleted() || !active(rule, now)) {
+            if (!rule.enabled() || rule.deleted() || !PermissionRuleMatcher.active(rule, now)) {
                 continue;
             }
             if (rule.resource().type() != ResourceType.TABLE
@@ -216,7 +186,7 @@ public final class PermissionRewriter {
                 continue;
             }
 
-            SubjectMatch match = matchSubject(rule.subject(), permissions);
+            SubjectMatch match = PermissionRuleMatcher.matchSubject(rule.subject(), permissions);
             if (match == SubjectMatch.UNKNOWN) {
                 if (rule.effect() == EffectType.DENY) {
                     throw new PermissionRewriteException(
@@ -238,37 +208,6 @@ public final class PermissionRewriter {
                 allows.add(rule);
             }
         }
-    }
-
-    private boolean active(SchemaPermission rule, Instant now) {
-        if (rule.effectiveFrom() != null && !rule.effectiveFrom().isBlank()
-                && now.isBefore(parseInstant(rule, rule.effectiveFrom(), "effectiveFrom"))) {
-            return false;
-        }
-        return rule.effectiveTo() == null || rule.effectiveTo().isBlank()
-                || !now.isAfter(parseInstant(rule, rule.effectiveTo(), "effectiveTo"));
-    }
-
-    private Instant parseInstant(SchemaPermission rule, String value, String field) {
-        try {
-            return Instant.parse(value);
-        } catch (DateTimeParseException error) {
-            throw new PermissionRewriteException(
-                    "权限 " + rule.code() + " 的 " + field + " 不是合法 ISO-8601 时间: " + value, error);
-        }
-    }
-
-    private SubjectMatch matchSubject(PermissionSubject subject, PermissionContext permissions) {
-        return switch (subject.type()) {
-            case PUBLIC -> SubjectMatch.MATCH;
-            case USER -> subject.id().equals(permissions.subjectId())
-                    ? SubjectMatch.MATCH : SubjectMatch.NO_MATCH;
-            case ROLE -> permissions.roleIds().contains(subject.id())
-                    ? SubjectMatch.MATCH : SubjectMatch.NO_MATCH;
-            case DEPARTMENT -> permissions.deptIds().contains(subject.id())
-                    ? SubjectMatch.MATCH : SubjectMatch.NO_MATCH;
-            case ORG -> SubjectMatch.UNKNOWN;
-        };
     }
 
     private boolean isUnconditional(SchemaPermission rule) {
@@ -596,11 +535,5 @@ public final class PermissionRewriter {
 
     private boolean isAlwaysFalse(FilterNode node) {
         return node instanceof FilterNode.Constant constant && !constant.value();
-    }
-
-    private enum SubjectMatch {
-        MATCH,
-        NO_MATCH,
-        UNKNOWN
     }
 }
