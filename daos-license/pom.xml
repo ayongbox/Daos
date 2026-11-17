@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.ayongbox.daos</groupId>
+        <artifactId>daos-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>daos-license</artifactId>
+    <name>daos-license</name>
+    <description>License 验签、能力判定与降级；不依赖任何业务模块</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.ayongbox.daos</groupId>
+            <artifactId>daos-core</artifactId>
+        </dependency>
+    </dependencies>
+</project>

@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      # 前置：Baseon 1.0.0-SNAPSHOT 需由内网 Maven 仓库或 CI 注入的 settings.xml 提供
+      - name: Maven verify
+        run: mvn -B verify
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+      - name: Contract and UI token checks
+        run: pnpm check
+      - name: Build
+        run: pnpm build
+      - name: Runtime must not bundle designer
+        run: |
+          if [ -d apps/runtime/dist/assets ] && grep -rl "@daos/designer" apps/runtime/dist/assets; then
+            echo "runtime 产物包含 designer 代码"
+            exit 1
+          fi

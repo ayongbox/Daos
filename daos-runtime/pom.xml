@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.ayongbox.daos</groupId>
+        <artifactId>daos-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>daos-runtime</artifactId>
+    <name>daos-runtime</name>
+    <description>数据服务、查询执行、结构演进、流程封装；不对外暴露 REST</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.ayongbox.daos</groupId>
+            <artifactId>daos-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ayongbox</groupId>
+            <artifactId>baseon-starter-mybatis-plus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ayongbox</groupId>
+            <artifactId>baseon-starter-tenant</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ayongbox</groupId>
+            <artifactId>baseon-starter-data-scope</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ayongbox</groupId>
+            <artifactId>baseon-starter-auth</artifactId>
+        </dependency>
+    </dependencies>
+</project>
