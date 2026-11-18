@@ -57,6 +57,10 @@ public final class DefaultQueryCompiler implements QueryCompiler {
 
         IrTable table = schema.requireTable(tableId);
 
+        if (request.aggregated()) {
+            return aggregated(table, request);
+        }
+
         return new QueryPlan.Select(
                 table.physicalName(),
                 projection(table, request.fieldCodes()),
@@ -64,6 +68,77 @@ public final class DefaultQueryCompiler implements QueryCompiler {
                 orderBy(table, request.sorts()),
                 request.pageSize(),
                 request.offset());
+    }
+
+    private QueryPlan.Select aggregated(IrTable table, QueryRequest request) {
+        List<QueryPlan.SelectItem> items = new ArrayList<>();
+        List<String> groupBy = new ArrayList<>();
+
+        for (String fieldCode : request.groupBy()) {
+            IrColumn column = requireColumn(table, fieldCode);
+            requireProjectable(table, column);
+            items.add(new QueryPlan.SelectItem(column.physicalName(), fieldCode));
+            groupBy.add(column.physicalName());
+        }
+
+        for (QueryRequest.AggregateSpec aggregate : request.aggregates()) {
+            if (aggregate.fieldCode() == null) {
+                items.add(new QueryPlan.SelectItem("*", aggregate.displayName(), aggregate.function()));
+                continue;
+            }
+            IrColumn column = requireColumn(table, aggregate.fieldCode());
+            requireProjectable(table, column);
+            if (aggregate.function().requiresNumericField()
+                    && !column.source().logicalType().numeric()) {
+                throw new QueryCompileException(
+                        "字段不支持数值聚合 " + aggregate.function().code() + ": "
+                                + table.tableCode() + "." + aggregate.fieldCode());
+            }
+            items.add(new QueryPlan.SelectItem(
+                    column.physicalName(), aggregate.displayName(), aggregate.function()));
+        }
+
+        return new QueryPlan.Select(
+                table.physicalName(),
+                items,
+                rewriteFilter(table, request.filter()),
+                aggregateOrderBy(table, request),
+                request.pageSize(),
+                request.offset(),
+                groupBy);
+    }
+
+    private List<QueryPlan.OrderItem> aggregateOrderBy(IrTable table, QueryRequest request) {
+        Set<String> groupFields = new java.util.HashSet<>(request.groupBy());
+        Set<String> aggregateAliases = new java.util.HashSet<>();
+        request.aggregates().forEach(aggregate -> aggregateAliases.add(aggregate.displayName()));
+
+        List<QueryPlan.OrderItem> items = new ArrayList<>(request.sorts().size());
+        for (QueryRequest.SortSpec sort : request.sorts()) {
+            boolean ascending = sort.direction() == SortDirection.ASC;
+            if (aggregateAliases.contains(sort.fieldCode())) {
+                items.add(new QueryPlan.OrderItem(sort.fieldCode(), ascending));
+                continue;
+            }
+            if (!groupFields.contains(sort.fieldCode())) {
+                throw new QueryCompileException(
+                        "聚合查询只能按分组字段或聚合列排序: " + sort.fieldCode());
+            }
+            IrColumn column = requireColumn(table, sort.fieldCode());
+            items.add(new QueryPlan.OrderItem(column.physicalName(), ascending));
+        }
+        return items;
+    }
+
+    private void requireProjectable(IrTable table, IrColumn column) {
+        if (column.storage() == IrColumn.Storage.DERIVED) {
+            throw new QueryCompileException(
+                    "派生字段不能直接投影: " + table.tableCode() + "." + column.fieldCode());
+        }
+        if (column.storage() == IrColumn.Storage.JSON_MEMBER) {
+            throw new QueryCompileException(
+                    "JSON 成员字段暂不支持投影: " + table.tableCode() + "." + column.fieldCode());
+        }
     }
 
     private List<QueryPlan.SelectItem> projection(IrTable table, List<String> fieldCodes) {

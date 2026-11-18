@@ -1,5 +1,6 @@
 package io.github.ayongbox.daos.test;
 
+import io.github.ayongbox.daos.core.ir.AggregateFunction;
 import io.github.ayongbox.daos.core.ir.DdlPlan;
 import io.github.ayongbox.daos.core.ir.FilterNode;
 import io.github.ayongbox.daos.core.ir.IrColumn;
@@ -113,6 +114,28 @@ class DialectTest {
                 + " WHERE (`title` LIKE ? ESCAPE '!' AND `paid` = ?)"
                 + " ORDER BY `created_at` DESC LIMIT 20", statement.sql());
         assertEquals(List.of("%50!%%", true), statement.parameters());
+    }
+
+    @Test
+    void rendersAggregateProjectionAndGroupBy() {
+        QueryPlan.Select plan = new QueryPlan.Select(
+                "app_demo_orders",
+                List.of(
+                        new QueryPlan.SelectItem("city", "city"),
+                        new QueryPlan.SelectItem("*", "记录数", AggregateFunction.COUNT),
+                        new QueryPlan.SelectItem("amount", "金额合计", AggregateFunction.SUM)),
+                FilterNode.alwaysTrue(),
+                List.of(new QueryPlan.OrderItem("city", true)),
+                20,
+                0,
+                List.of("city"));
+
+        SqlStatement statement = mysql.query().render(plan);
+
+        assertEquals("SELECT `city`, COUNT(*) AS `记录数`, SUM(`amount`) AS `金额合计`"
+                + " FROM `app_demo_orders` GROUP BY `city` ORDER BY `city` ASC LIMIT 20",
+                statement.sql());
+        assertTrue(statement.parameters().isEmpty());
     }
 
     @Test

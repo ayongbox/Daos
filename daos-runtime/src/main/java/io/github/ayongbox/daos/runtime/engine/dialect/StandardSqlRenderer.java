@@ -49,6 +49,11 @@ final class StandardSqlRenderer implements SqlRenderer {
         if (!(filter instanceof FilterNode.Constant constant && constant.value())) {
             sql.append(" WHERE ").append(renderFilter(filter, parameters));
         }
+        if (!select.groupBy().isEmpty()) {
+            StringJoiner groupBy = new StringJoiner(", ");
+            select.groupBy().forEach(column -> groupBy.add(dialect.quote(column)));
+            sql.append(" GROUP BY ").append(groupBy);
+        }
         if (!select.orderBy().isEmpty()) {
             sql.append(" ORDER BY ").append(renderOrderBy(select.orderBy()));
         }
@@ -64,13 +69,32 @@ final class StandardSqlRenderer implements SqlRenderer {
     @Override
     public SqlStatement renderCount(QueryPlan.Select select) {
         Objects.requireNonNull(select, "select");
+        if (select.aggregated() && select.groupBy().isEmpty()) {
+            return new SqlStatement("SELECT 1 AS " + dialect.quote("total"), List.of());
+        }
+
         List<Object> parameters = new ArrayList<>();
         StringBuilder sql = new StringBuilder("SELECT COUNT(*) AS ")
-                .append(dialect.quote("total"))
-                .append(" FROM ").append(dialect.quote(select.physicalTable()));
+                .append(dialect.quote("total"));
+
+        if (!select.groupBy().isEmpty()) {
+            StringJoiner groupBy = new StringJoiner(", ");
+            select.groupBy().forEach(column -> groupBy.add(dialect.quote(column)));
+            sql.append(" FROM (SELECT ").append(groupBy)
+                    .append(" FROM ").append(dialect.quote(select.physicalTable()));
+        } else {
+            sql.append(" FROM ").append(dialect.quote(select.physicalTable()));
+        }
+
         FilterNode filter = select.filter();
         if (!(filter instanceof FilterNode.Constant constant && constant.value())) {
             sql.append(" WHERE ").append(renderFilter(filter, parameters));
+        }
+        if (!select.groupBy().isEmpty()) {
+            sql.append(" GROUP BY ").append(select.groupBy().stream()
+                    .map(dialect::quote)
+                    .collect(java.util.stream.Collectors.joining(", ")))
+                    .append(") ").append(dialect.quote("daos_grouped"));
         }
         return new SqlStatement(sql.toString(), parameters);
     }
@@ -82,10 +106,28 @@ final class StandardSqlRenderer implements SqlRenderer {
         }
         StringJoiner joiner = new StringJoiner(", ");
         for (QueryPlan.SelectItem item : items) {
-            String column = dialect.quote(item.column());
-            joiner.add(item.column().equals(item.alias()) ? column : column + " AS " + dialect.quote(item.alias()));
+            if (item.function() == null) {
+                String column = dialect.quote(item.column());
+                joiner.add(item.column().equals(item.alias())
+                        ? column
+                        : column + " AS " + dialect.quote(item.alias()));
+                continue;
+            }
+            joiner.add(renderAggregate(item) + " AS " + dialect.quote(item.alias()));
         }
         sql.append(joiner);
+    }
+
+    private String renderAggregate(QueryPlan.SelectItem item) {
+        String column = "*".equals(item.column()) ? "*" : dialect.quote(item.column());
+        return switch (item.function()) {
+            case COUNT -> "COUNT(" + column + ")";
+            case COUNT_DISTINCT -> "COUNT(DISTINCT " + column + ")";
+            case SUM -> "SUM(" + column + ")";
+            case AVG -> "AVG(" + column + ")";
+            case MIN -> "MIN(" + column + ")";
+            case MAX -> "MAX(" + column + ")";
+        };
     }
 
     private String renderOrderBy(List<QueryPlan.OrderItem> orderBy) {

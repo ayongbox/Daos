@@ -165,10 +165,16 @@ function renderNode(node: RenderNode): ReactNode {
   );
 }
 
-export function FormRuntime({ appId }: { appId: string }) {
+export function FormRuntime({
+  appId,
+  fixedFormCode
+}: {
+  appId: string;
+  fixedFormCode?: string;
+}) {
   const { message } = AntApp.useApp();
   const [forms, setForms] = useState<FormSummary[] | null>(null);
-  const [formCode, setFormCode] = useState<string | null>(null);
+  const [formCode, setFormCode] = useState<string | null>(fixedFormCode ?? null);
   const [result, setResult] = useState<FormRenderResult | null>(null);
   const [records, setRecords] = useState<RecordPage | null>(null);
   const [loading, setLoading] = useState(false);
@@ -178,7 +184,7 @@ export function FormRuntime({ appId }: { appId: string }) {
   useEffect(() => {
     let cancelled = false;
     setForms(null);
-    setFormCode(null);
+    setFormCode(fixedFormCode ?? null);
     setResult(null);
     setRecords(null);
     api
@@ -186,7 +192,7 @@ export function FormRuntime({ appId }: { appId: string }) {
       .then((value) => {
         if (cancelled) return;
         setForms(value);
-        setFormCode(value[0]?.formCode ?? null);
+        setFormCode(fixedFormCode ?? value[0]?.formCode ?? null);
       })
       .catch((cause) => {
         if (cancelled) return;
@@ -196,7 +202,7 @@ export function FormRuntime({ appId }: { appId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [appId]);
+  }, [appId, fixedFormCode]);
 
   useEffect(() => {
     if (!formCode) {
@@ -309,13 +315,15 @@ export function FormRuntime({ appId }: { appId: string }) {
         }}
       >
         <Space size={8}>
-          <Typography.Text strong>表单运行</Typography.Text>
-          <Select
-            style={{ minWidth: 200 }}
-            value={formCode ?? undefined}
-            options={forms.map((item) => ({ value: item.formCode, label: item.displayName }))}
-            onChange={setFormCode}
-          />
+          <Typography.Text strong>{fixedFormCode ? result?.displayName ?? '表单运行' : '表单运行'}</Typography.Text>
+          {fixedFormCode ? null : (
+            <Select
+              style={{ minWidth: 200 }}
+              value={formCode ?? undefined}
+              options={forms.map((item) => ({ value: item.formCode, label: item.displayName }))}
+              onChange={setFormCode}
+            />
+          )}
           {result ? <Tag style={{ marginInlineEnd: 0 }}>{result.tableCode}</Tag> : null}
         </Space>
         <Button onClick={refreshRecords} disabled={!result} loading={loading}>

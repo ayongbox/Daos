@@ -15,6 +15,8 @@ import io.github.ayongbox.daos.runtime.exec.DataAccessFacade;
 import io.github.ayongbox.daos.runtime.exec.DataQueryService;
 import io.github.ayongbox.daos.runtime.exec.DataWriteService;
 import io.github.ayongbox.daos.runtime.form.FormRenderService;
+import io.github.ayongbox.daos.runtime.menu.MenuService;
+import io.github.ayongbox.daos.runtime.view.ViewService;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -67,6 +69,16 @@ public class DataConfiguration {
     @Bean
     public FormRenderService formRenderService(SnapshotStore snapshotStore) {
         return new FormRenderService(snapshotStore);
+    }
+
+    @Bean
+    public ViewService viewService(SnapshotStore snapshotStore, DataQueryService dataQueryService) {
+        return new ViewService(snapshotStore, dataQueryService);
+    }
+
+    @Bean
+    public MenuService menuService(SnapshotStore snapshotStore) {
+        return new MenuService(snapshotStore);
     }
 
     @Bean

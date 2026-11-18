@@ -44,8 +44,10 @@ import {
   type MigrationRecord
 } from './api';
 import { AppIcon, AppIconPicker } from './appIcons';
+import { AppRuntime } from './AppRuntime';
 import { FormDesigner } from './FormDesigner';
 import { FormRuntime } from './FormRuntime';
+import { ViewDesigner } from './ViewDesigner';
 
 const CODE_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
 const { Header, Sider, Content } = Layout;
@@ -55,13 +57,14 @@ const APP_NAV_ITEMS = [
   { key: 'model', label: '数据建模', ready: true },
   { key: 'form', label: '表单设计', ready: true },
   { key: 'run', label: '表单运行', ready: true },
-  { key: 'view', label: '视图与报表', ready: false },
+  { key: 'view', label: '视图与报表', ready: true },
+  { key: 'runtime', label: '应用运行', ready: true },
   { key: 'flow', label: '流程设计', ready: false },
   { key: 'member', label: '权限与成员', ready: false },
   { key: 'setting', label: '应用设置', ready: false }
 ] as const;
 
-type Capability = 'model' | 'form' | 'run';
+type Capability = 'model' | 'form' | 'run' | 'view' | 'runtime';
 
 function newId(): string {
   const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -276,7 +279,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
     api
       .draft(appId)
       .then((value) => {
-        setDraft(value);
+        setDraft({ ...value, views: value.views ?? [], menus: value.menus ?? [] });
         setDirty(false);
         setSelectedTableId(value.tables[0]?.id ?? null);
       })
@@ -342,7 +345,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
 
   async function reloadDraft(targetAppId: string) {
     const value = await api.draft(targetAppId);
-    setDraft(value);
+    setDraft({ ...value, views: value.views ?? [], menus: value.menus ?? [] });
     setDirty(false);
     if (!value.tables.some((table) => table.id === selectedTableId)) {
       setSelectedTableId(value.tables[0]?.id ?? null);
@@ -443,12 +446,23 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
       okButtonProps: { danger: true },
       onOk: () => {
         const remaining = draft.tables.filter((item) => item.id !== tableId);
+        const removedViewIds = new Set(
+          (draft.views ?? []).filter((view) => view.tableId === tableId).map((view) => view.id)
+        );
         setDraft({
           ...draft,
           tables: remaining.map((item) => ({
             ...item,
             relations: item.relations.filter((relation) => relation.targetTableId !== tableId)
-          }))
+          })),
+          views: (draft.views ?? []).filter((view) => !removedViewIds.has(view.id)),
+          menus: (draft.menus ?? []).filter(
+            (menu) =>
+              !(
+                (menu.menuType === 'TABLE' && menu.targetId === tableId) ||
+                (menu.menuType === 'VIEW' && removedViewIds.has(menu.targetId))
+              )
+          )
         });
         setSelectedTableId((current) => (current === tableId ? (remaining[0]?.id ?? null) : current));
         setDirty(true);
@@ -518,11 +532,31 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
       content: '发布后会生成 DROP COLUMN；已删除列的数据无法通过回滚恢复。',
       okType: 'danger',
       onOk: () =>
-        patchTable(table.id, (current) => ({
-          ...current,
-          fields: current.fields.filter((item) => item.id !== field.id),
-          nameFieldId: current.nameFieldId === field.id ? null : current.nameFieldId
-        }))
+        setDraft((previous) => {
+          if (!previous) return previous;
+          return {
+            ...previous,
+            tables: previous.tables.map((current) =>
+              current.id === table.id
+                ? {
+                    ...current,
+                    fields: current.fields.filter((item) => item.id !== field.id),
+                    nameFieldId: current.nameFieldId === field.id ? null : current.nameFieldId
+                  }
+                : current
+            ),
+            views: (previous.views ?? []).map((view) =>
+              view.tableId === table.id
+                ? {
+                    ...view,
+                    columns: view.columns.filter((column) => column.fieldId !== field.id),
+                    filters: view.filters.filter((filter) => filter.fieldId !== field.id),
+                    sorts: view.sorts.filter((sort) => sort.fieldId !== field.id)
+                  }
+                : view
+            )
+          };
+        })
     });
   }
 
@@ -962,7 +996,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                     {draft.tables.length} 张表
                   </Typography.Text>
                 </Space>
-                {capability === 'run' ? null : (
+                {capability === 'run' || capability === 'runtime' ? null : (
                   <Space size={8} wrap>
                     <Button type="text" onClick={openPreview}>
                       预览迁移
@@ -992,6 +1026,16 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                 />
               ) : capability === 'run' ? (
                 <FormRuntime appId={appId} />
+              ) : capability === 'view' ? (
+                <ViewDesigner
+                  app={draft}
+                  onChange={(next) => {
+                    setDraft(next);
+                    setDirty(true);
+                  }}
+                />
+              ) : capability === 'runtime' ? (
+                <AppRuntime appId={appId} />
               ) : (
                 <div
                   style={{

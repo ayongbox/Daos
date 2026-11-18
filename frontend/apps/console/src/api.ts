@@ -126,6 +126,89 @@ export interface RecordPage {
   records: Record<string, unknown>[];
 }
 
+export interface ViewSummary {
+  viewId: string;
+  viewCode: string;
+  displayName: string;
+  tableId: string;
+  tableCode: string;
+  viewType: string;
+}
+
+export interface ViewColumnSpec {
+  fieldId: string;
+  fieldCode: string;
+  label: string;
+  visible: boolean;
+  width?: number | null;
+  sortOrder: number;
+}
+
+export interface ViewFilterSpec {
+  fieldId: string;
+  fieldCode: string;
+  operator: string;
+  value?: unknown;
+}
+
+export interface ViewSortSpec {
+  fieldId: string;
+  fieldCode: string;
+  direction: 'ASC' | 'DESC';
+}
+
+export interface ViewGroupSpec {
+  fieldId: string;
+  fieldCode: string;
+  label: string;
+}
+
+export interface ViewAggregationSpec {
+  function: 'count' | 'count_distinct' | 'sum' | 'avg' | 'min' | 'max';
+  fieldId?: string | null;
+  fieldCode?: string | null;
+  displayName: string;
+}
+
+export interface ViewDetail {
+  viewId: string;
+  viewCode: string;
+  displayName: string;
+  tableId: string;
+  tableCode: string;
+  viewType: string;
+  pageSize: number;
+  columns: ViewColumnSpec[];
+  filters: ViewFilterSpec[];
+  sorts: ViewSortSpec[];
+  groupBy: ViewGroupSpec[];
+  aggregations: ViewAggregationSpec[];
+}
+
+export interface ViewPage {
+  total: number;
+  current: number;
+  size: number;
+  records: Record<string, unknown>[];
+}
+
+export interface ViewAggregatePage {
+  total: number;
+  current: number;
+  size: number;
+  rows: Record<string, unknown>[];
+}
+
+export interface MenuSummary {
+  menuId: string;
+  menuCode: string;
+  displayName: string;
+  icon?: string | null;
+  menuType: 'VIEW' | 'FORM' | 'TABLE';
+  targetId: string;
+  targetCode?: string | null;
+}
+
 export const api = {
   login: (tenantId: string, username: string, password: string) =>
     client.post<LoginResponse>('/api/auth/login', { tenantId, username, password }),
@@ -162,5 +245,17 @@ export const api = {
     client.post<{ id: string }>(
       `/api/apps/${appId}/tables/${encodeURIComponent(tableCode)}/records`,
       values
-    )
+    ),
+  views: (appId: string) => client.get<ViewSummary[]>(`/api/apps/${appId}/views`),
+  view: (appId: string, viewCode: string) =>
+    client.get<ViewDetail>(`/api/apps/${appId}/views/${encodeURIComponent(viewCode)}`),
+  viewRecords: (appId: string, viewCode: string, current = 1, size = 0) =>
+    client.get<ViewPage>(
+      `/api/apps/${appId}/views/${encodeURIComponent(viewCode)}/records?current=${current}&size=${size}`
+    ),
+  viewAggregate: (appId: string, viewCode: string, current = 1, size = 0) =>
+    client.get<ViewAggregatePage>(
+      `/api/apps/${appId}/views/${encodeURIComponent(viewCode)}/aggregate?current=${current}&size=${size}`
+    ),
+  menus: (appId: string) => client.get<MenuSummary[]>(`/api/apps/${appId}/menus`)
 };

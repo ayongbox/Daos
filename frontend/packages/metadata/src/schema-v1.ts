@@ -261,6 +261,8 @@ export interface SchemaApp extends AuditInfo {
   status: MetadataStatus;
   tables: SchemaTable[];
   forms: SchemaForm[];
+  views: SchemaView[];
+  menus: SchemaMenu[];
   permissions: SchemaPermission[];
   ext: Record<string, unknown>;
 }
@@ -435,6 +437,76 @@ export interface SchemaForm extends AuditInfo {
   events: FormEvent[];
   status: MetadataStatus;
   version: number;
+  ext: Record<string, unknown>;
+}
+
+export type ViewType = 'GRID';
+export type MenuType = 'VIEW' | 'FORM' | 'TABLE';
+
+export interface ViewColumn {
+  fieldId: Ulid;
+  visible: boolean;
+  width?: number | null;
+  sortOrder: number;
+}
+
+export interface ViewFilter {
+  fieldId: Ulid;
+  operator: ConditionOperator;
+  value?: unknown;
+}
+
+export interface ViewSort {
+  fieldId: Ulid;
+  direction: SortDirection;
+}
+
+export type AggregateFunction =
+  | 'count'
+  | 'count_distinct'
+  | 'sum'
+  | 'avg'
+  | 'min'
+  | 'max';
+
+/** 汇总列。count 允许 fieldId 为空，表示 COUNT(*)。 */
+export interface ViewAggregation {
+  function: AggregateFunction;
+  fieldId?: Ulid | null;
+  displayName: string;
+}
+
+/** 列表视图：列、筛选与排序只引用表字段，不复制字段定义。 */
+export interface SchemaView extends AuditInfo {
+  id: Ulid;
+  appId: Ulid;
+  tableId: Ulid;
+  code: string;
+  displayName: string;
+  description?: string | null;
+  viewType: ViewType;
+  columns: ViewColumn[];
+  filters: ViewFilter[];
+  sorts: ViewSort[];
+  groupBy: Ulid[];
+  aggregations: ViewAggregation[];
+  pageSize: number;
+  status: MetadataStatus;
+  ext: Record<string, unknown>;
+}
+
+/** 应用菜单：随应用发布，按 sortOrder 排序，visible=false 时运行时隐藏。 */
+export interface SchemaMenu extends AuditInfo {
+  id: Ulid;
+  appId: Ulid;
+  code: string;
+  displayName: string;
+  icon?: string | null;
+  menuType: MenuType;
+  targetId: Ulid;
+  sortOrder: number;
+  visible: boolean;
+  status: MetadataStatus;
   ext: Record<string, unknown>;
 }
 

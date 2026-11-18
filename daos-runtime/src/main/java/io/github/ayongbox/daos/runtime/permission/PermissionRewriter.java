@@ -72,9 +72,15 @@ public final class PermissionRewriter {
         Set<String> hiddenColumns = hiddenColumns(table, allows);
         rejectHiddenFilter(request, plan, table, hiddenColumns);
 
-        List<QueryPlan.SelectItem> items = plan.items().stream()
-                .filter(item -> !hiddenColumns.contains(item.column()))
-                .toList();
+        List<QueryPlan.SelectItem> items;
+        if (plan.aggregated()) {
+            rejectHiddenAggregation(plan, hiddenColumns);
+            items = plan.items();
+        } else {
+            items = plan.items().stream()
+                    .filter(item -> !hiddenColumns.contains(item.column()))
+                    .toList();
+        }
 
         List<FilterNode> predicates = new ArrayList<>();
         predicates.add(tenantPredicate(table, permissions));
@@ -86,7 +92,27 @@ public final class PermissionRewriter {
         predicates.add(plan.filter());
 
         return new QueryPlan.Select(
-                plan.physicalTable(), items, conjoin(predicates), plan.orderBy(), plan.limit(), plan.offset());
+                plan.physicalTable(), items, conjoin(predicates), plan.orderBy(),
+                plan.limit(), plan.offset(), plan.groupBy());
+    }
+
+    /**
+     * 聚合列不能像普通投影那样静默剔除，否则分组与汇总语义会被悄悄改变，直接拒绝。
+     */
+    private void rejectHiddenAggregation(QueryPlan.Select plan, Set<String> hiddenColumns) {
+        if (hiddenColumns.isEmpty()) {
+            return;
+        }
+        for (QueryPlan.SelectItem item : plan.items()) {
+            if (hiddenColumns.contains(item.column())) {
+                throw new PermissionRewriteException("聚合查询包含无权限字段: " + item.column());
+            }
+        }
+        for (String group : plan.groupBy()) {
+            if (hiddenColumns.contains(group)) {
+                throw new PermissionRewriteException("分组字段无权限: " + group);
+            }
+        }
     }
 
     /**

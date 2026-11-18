@@ -63,6 +63,13 @@ public enum FieldLogicalType {
         return this == ROLLUP || this == FORMULA;
     }
 
+    /**
+     * 是否可参与 SUM/AVG 等数值聚合。
+     */
+    public boolean numeric() {
+        return this == NUMBER || this == DECIMAL || this == RATING || this == PROGRESS;
+    }
+
     @JsonCreator
     public static FieldLogicalType fromCode(String code) {
         for (FieldLogicalType type : values()) {

@@ -168,6 +168,9 @@ public final class DataQueryService {
      * 两者是系统列，不参与字段权限与投影校验。
      */
     private static QueryPlan.Select withIdentity(QueryPlan.Select select) {
+        if (select.aggregated()) {
+            return select;
+        }
         List<QueryPlan.SelectItem> items = new ArrayList<>(select.items().size() + 2);
         items.addAll(select.items());
         items.add(new QueryPlan.SelectItem(ID_COLUMN, ID_COLUMN));

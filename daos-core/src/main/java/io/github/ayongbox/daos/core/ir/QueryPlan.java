@@ -14,13 +14,35 @@ public sealed interface QueryPlan {
             FilterNode filter,
             List<OrderItem> orderBy,
             int limit,
-            int offset) implements QueryPlan {
+            int offset,
+            List<String> groupBy) implements QueryPlan {
 
         public Select {
             Objects.requireNonNull(physicalTable, "physicalTable");
             items = items == null ? List.of() : List.copyOf(items);
             filter = filter == null ? FilterNode.alwaysTrue() : filter;
             orderBy = orderBy == null ? List.of() : List.copyOf(orderBy);
+            groupBy = groupBy == null ? List.of() : List.copyOf(groupBy);
+        }
+
+        /**
+         * 兼容普通（非聚合）查询的构造方式。
+         */
+        public Select(
+                String physicalTable,
+                List<SelectItem> items,
+                FilterNode filter,
+                List<OrderItem> orderBy,
+                int limit,
+                int offset) {
+            this(physicalTable, items, filter, orderBy, limit, offset, List.of());
+        }
+
+        /**
+         * 是否包含聚合投影。聚合查询不再追加主键与版本列，也不能按记录身份排序。
+         */
+        public boolean aggregated() {
+            return !groupBy.isEmpty() || items.stream().anyMatch(item -> item.function() != null);
         }
 
         /**
@@ -30,18 +52,23 @@ public sealed interface QueryPlan {
             if (additional == null) {
                 return this;
             }
-            return new Select(physicalTable, items, FilterNode.and(filter, additional), orderBy, limit, offset);
+            return new Select(physicalTable, items, FilterNode.and(filter, additional),
+                    orderBy, limit, offset, groupBy);
         }
 
         public Select withLimit(int newLimit, int newOffset) {
-            return new Select(physicalTable, items, filter, orderBy, newLimit, newOffset);
+            return new Select(physicalTable, items, filter, orderBy, newLimit, newOffset, groupBy);
         }
     }
 
-    record SelectItem(String column, String alias) {
+    record SelectItem(String column, String alias, AggregateFunction function) {
         public SelectItem {
             Objects.requireNonNull(column, "column");
             alias = alias == null ? column : alias;
+        }
+
+        public SelectItem(String column, String alias) {
+            this(column, alias, null);
         }
     }
 
