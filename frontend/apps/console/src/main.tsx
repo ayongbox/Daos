@@ -1,11 +1,31 @@
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode, Suspense, lazy, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App as AntApp, Spin } from 'antd';
 import { ThemeProvider } from '@daos/app-shell';
 import './app.css';
-import { LoginPage } from './LoginPage';
-import { ModelerPage } from './ModelerPage';
 import { AUTH_EXPIRED_EVENT, api, tokenStore } from './api';
+
+const LoginPage = lazy(() =>
+  import('./LoginPage').then((module) => ({ default: module.LoginPage }))
+);
+const ModelerPage = lazy(() =>
+  import('./ModelerPage').then((module) => ({ default: module.ModelerPage }))
+);
+
+function fullScreenSpin() {
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+    >
+      <Spin />
+    </div>
+  );
+}
 
 type AuthState = 'checking' | 'authenticated' | 'anonymous';
 
@@ -55,22 +75,15 @@ function Console() {
   return (
     <ThemeProvider>
       <AntApp>
-        {auth === 'checking' ? (
-          <div
-            style={{
-              minHeight: '100vh',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <Spin />
-          </div>
-        ) : auth === 'authenticated' ? (
-          <ModelerPage onLogout={logout} />
-        ) : (
-          <LoginPage onLoggedIn={() => setAuth('authenticated')} />
-        )}
+        <Suspense fallback={fullScreenSpin()}>
+          {auth === 'checking' ? (
+            fullScreenSpin()
+          ) : auth === 'authenticated' ? (
+            <ModelerPage onLogout={logout} />
+          ) : (
+            <LoginPage onLoggedIn={() => setAuth('authenticated')} />
+          )}
+        </Suspense>
       </AntApp>
     </ThemeProvider>
   );

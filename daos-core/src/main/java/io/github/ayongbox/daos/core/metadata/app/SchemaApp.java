@@ -193,8 +193,12 @@ public record SchemaApp(
             });
             view.filters().forEach(filter ->
                     requireField(table, view.code(), filter.fieldId()));
-            view.sorts().forEach(sort ->
-                    requireField(table, view.code(), sort.fieldId()));
+            view.sorts().forEach(sort -> {
+                if (sort.aggregation() != null) {
+                    return;
+                }
+                requireField(table, view.code(), sort.fieldId());
+            });
 
             Set<String> groupFieldIds = new HashSet<>();
             Set<String> groupCodes = new HashSet<>();
@@ -235,6 +239,25 @@ public record SchemaApp(
                     throw new IllegalArgumentException(
                             "视图 " + view.code() + " 的字段不支持数值汇总 "
                                     + aggregate.function().code() + ": " + field.code());
+                }
+            });
+
+            view.sorts().forEach(sort -> {
+                if (sort.aggregation() != null && !displayNames.contains(sort.aggregation())) {
+                    throw new IllegalArgumentException(
+                            "视图 " + view.code() + " 的排序引用了不存在的汇总列: "
+                                    + sort.aggregation());
+                }
+            });
+            if (!view.having().isEmpty() && view.aggregations().isEmpty()) {
+                throw new IllegalArgumentException(
+                        "视图 " + view.code() + " 的 HAVING 条件必须配合汇总列使用");
+            }
+            view.having().forEach(condition -> {
+                if (!displayNames.contains(condition.aggregation())) {
+                    throw new IllegalArgumentException(
+                            "视图 " + view.code() + " 的 HAVING 引用了不存在的汇总列: "
+                                    + condition.aggregation());
                 }
             });
         }

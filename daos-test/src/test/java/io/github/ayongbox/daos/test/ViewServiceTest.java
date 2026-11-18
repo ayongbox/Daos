@@ -30,6 +30,7 @@ import io.github.ayongbox.daos.core.metadata.view.SchemaView;
 import io.github.ayongbox.daos.core.metadata.view.ViewAggregation;
 import io.github.ayongbox.daos.core.metadata.view.ViewColumn;
 import io.github.ayongbox.daos.core.metadata.view.ViewFilter;
+import io.github.ayongbox.daos.core.metadata.view.ViewHaving;
 import io.github.ayongbox.daos.core.metadata.view.ViewSort;
 import io.github.ayongbox.daos.core.snapshot.SchemaSnapshot;
 import io.github.ayongbox.daos.core.spi.MetadataStore;
@@ -155,6 +156,41 @@ class ViewServiceTest {
     }
 
     @Test
+    void summarizesAllRecordsForBoardKpi() {
+        Map<String, Object> summary = viewService.summary(
+                APP_ID, "users_amount_by_city", context());
+
+        assertEquals(3L, ((Number) summary.get("记录数")).longValue());
+        assertEquals(0, new java.math.BigDecimal("35")
+                .compareTo((java.math.BigDecimal) summary.get("金额合计")));
+    }
+
+    @Test
+    void sortsAggregateRowsByAggregationColumn() {
+        ViewService.ViewAggregatePage page = viewService.aggregate(
+                APP_ID, "users_amount_by_city", 1, 0, context());
+
+        assertEquals("北京", page.rows().get(0).get("city"));
+        assertEquals("上海", page.rows().get(1).get("city"));
+    }
+
+    @Test
+    void appliesHavingToGroupedAggregation() {
+        ViewService.ViewAggregatePage page = viewService.aggregate(
+                APP_ID, "users_big_cities", 1, 0, context());
+
+        assertEquals(1, page.total());
+        assertEquals(1, page.rows().size());
+        assertEquals("北京", page.rows().get(0).get("city"));
+        assertEquals(2L, ((Number) page.rows().get(0).get("记录数")).longValue());
+    }
+
+    @Test
+    void returnsEmptyViewListWhenAppIsNotPublished() {
+        assertTrue(viewService.listViews("unpublished-app").isEmpty());
+    }
+
+    @Test
     void rendersAggregationConfiguration() {
         ViewService.ViewDetail detail = viewService.render(APP_ID, "users_amount_by_city");
 
@@ -170,7 +206,7 @@ class ViewServiceTest {
     void viewsAndMenusArePublishedIntoSnapshot() {
         SchemaSnapshot active = snapshotStore.findActive(APP_ID).orElseThrow();
 
-        assertEquals(2, active.app().views().size());
+        assertEquals(3, active.app().views().size());
         assertEquals(3, active.app().menus().size());
         assertTrue(active.contentHash().length() > 0);
     }
@@ -219,11 +255,25 @@ class ViewServiceTest {
                 "v2", APP_ID, "t1", "users_amount_by_city", "城市金额汇总", null,
                 io.github.ayongbox.daos.core.metadata.view.ViewType.GRID,
                 List.of(), List.of(),
-                List.of(new ViewSort("f2", SortDirection.ASC)),
+                List.of(new ViewSort(null, "金额合计", SortDirection.DESC)),
                 List.of("f2"),
                 List.of(
                         new ViewAggregation(AggregateFunction.COUNT, null, "记录数"),
                         new ViewAggregation(AggregateFunction.SUM, "f3", "金额合计")),
+                List.of(),
+                20, MetadataStatus.DRAFT, Map.of(),
+                "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
+
+        SchemaView havingView = new SchemaView(
+                "v3", APP_ID, "t1", "users_big_cities", "大城市汇总", null,
+                io.github.ayongbox.daos.core.metadata.view.ViewType.GRID,
+                List.of(), List.of(),
+                List.of(new ViewSort(null, "金额合计", SortDirection.DESC)),
+                List.of("f2"),
+                List.of(
+                        new ViewAggregation(AggregateFunction.COUNT, null, "记录数"),
+                        new ViewAggregation(AggregateFunction.SUM, "f3", "金额合计")),
+                List.of(new ViewHaving("记录数", ConditionOperator.GTE, 2)),
                 20, MetadataStatus.DRAFT, Map.of(),
                 "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
 
@@ -239,7 +289,7 @@ class ViewServiceTest {
 
         return new SchemaApp(
                 APP_ID, APP_CODE, "演示应用", null, null, MetadataStatus.DRAFT,
-                List.of(users), List.of(), List.of(view, aggregateView),
+                List.of(users), List.of(), List.of(view, aggregateView, havingView),
                 List.of(tableMenu, hiddenMenu, viewMenu), List.of(), Map.of(),
                 "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
     }

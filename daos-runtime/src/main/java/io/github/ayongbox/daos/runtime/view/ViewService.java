@@ -38,17 +38,19 @@ public final class ViewService {
     }
 
     public List<ViewSummary> listViews(String appId) {
-        SchemaSnapshot snapshot = requireActive(appId);
-        return snapshot.app().views().stream()
-                .filter(view -> !view.deleted())
-                .map(view -> new ViewSummary(
-                        view.id(),
-                        view.code(),
-                        view.displayName(),
-                        view.tableId(),
-                        table(snapshot, view.tableId()).code(),
-                        view.viewType().name()))
-                .toList();
+        Objects.requireNonNull(appId, "appId");
+        return snapshotStore.findActive(appId)
+                .map(snapshot -> snapshot.app().views().stream()
+                        .filter(view -> !view.deleted())
+                        .map(view -> new ViewSummary(
+                                view.id(),
+                                view.code(),
+                                view.displayName(),
+                                view.tableId(),
+                                table(snapshot, view.tableId()).code(),
+                                view.viewType().name()))
+                        .toList())
+                .orElseGet(List::of);
     }
 
     public ViewDetail render(String appId, String viewCode) {
@@ -66,10 +68,15 @@ public final class ViewService {
                         filter.value()))
                 .toList();
         List<ViewSortSpec> sorts = view.sorts().stream()
-                .map(sort -> new ViewSortSpec(
-                        sort.fieldId(),
-                        requireField(fieldsById, sort.fieldId(), view.code()).code(),
-                        sort.direction().name()))
+                .map(sort -> {
+                    if (sort.aggregation() != null) {
+                        return new ViewSortSpec(null, null, sort.aggregation(),
+                                sort.direction().name());
+                    }
+                    SchemaField field = requireField(fieldsById, sort.fieldId(), view.code());
+                    return new ViewSortSpec(field.id(), field.code(), null,
+                            sort.direction().name());
+                })
                 .toList();
         List<ViewGroupSpec> groupBy = view.groupBy().stream()
                 .map(fieldId -> {
@@ -140,11 +147,39 @@ public final class ViewService {
                 (int) Math.max(1, current),
                 pageSize,
                 groupCodes,
-                aggregates);
+                aggregates,
+                havingOf(view));
 
         long total = queryService.count(appId, table.id(), request, permissions);
         List<Map<String, Object>> rows = queryService.query(appId, table.id(), request, permissions);
         return new ViewAggregatePage(total, request.page(), request.pageSize(), rows);
+    }
+
+    /**
+     * 不分组的全局汇总，用于看板 KPI。筛选条件与分组查询一致。
+     */
+    public Map<String, Object> summary(String appId, String viewCode, PermissionContext permissions) {
+        SchemaSnapshot snapshot = requireActive(appId);
+        SchemaView view = requireView(snapshot, viewCode);
+        if (view.aggregations().isEmpty()) {
+            throw new IllegalArgumentException("视图未配置汇总列: " + viewCode);
+        }
+        SchemaTable table = table(snapshot, view.tableId());
+        Map<String, SchemaField> fieldsById = fieldsById(table);
+
+        List<QueryRequest.AggregateSpec> aggregates = view.aggregations().stream()
+                .map(aggregate -> new QueryRequest.AggregateSpec(
+                        aggregate.function(),
+                        aggregate.fieldId() == null
+                                ? null
+                                : requireField(fieldsById, aggregate.fieldId(), view.code()).code(),
+                        aggregate.displayName()))
+                .toList();
+        QueryRequest request = new QueryRequest(
+                List.of(), filterOf(view, fieldsById), List.of(), 1, 1,
+                List.of(), aggregates);
+        List<Map<String, Object>> rows = queryService.query(appId, table.id(), request, permissions);
+        return rows.isEmpty() ? Map.of() : rows.get(0);
     }
 
     private List<QueryRequest.SortSpec> aggregateSorts(
@@ -152,14 +187,24 @@ public final class ViewService {
         Set<String> groupFieldIds = Set.copyOf(view.groupBy());
         return view.sorts().stream()
                 .map(sort -> {
+                    if (sort.aggregation() != null) {
+                        return new QueryRequest.SortSpec(sort.aggregation(), sort.direction());
+                    }
                     if (!groupFieldIds.contains(sort.fieldId())) {
                         throw new IllegalArgumentException(
-                                "汇总视图只能按分组字段排序: " + view.code());
+                                "汇总视图只能按分组字段或汇总列排序: " + view.code());
                     }
                     return new QueryRequest.SortSpec(
                             requireField(fieldsById, sort.fieldId(), view.code()).code(),
                             sort.direction());
                 })
+                .toList();
+    }
+
+    private static List<QueryRequest.HavingSpec> havingOf(SchemaView view) {
+        return view.having().stream()
+                .map(condition -> new QueryRequest.HavingSpec(
+                        condition.aggregation(), condition.operator(), condition.value()))
                 .toList();
     }
 
@@ -293,7 +338,7 @@ public final class ViewService {
     private SchemaSnapshot requireActive(String appId) {
         Objects.requireNonNull(appId, "appId");
         return snapshotStore.findActive(appId)
-                .orElseThrow(() -> new IllegalStateException("应用还没有生效版本: " + appId));
+                .orElseThrow(() -> new AppNotPublishedException("应用还没有生效版本: " + appId));
     }
 
     public record ViewSummary(
@@ -359,7 +404,12 @@ public final class ViewService {
     public record ViewSortSpec(
             String fieldId,
             String fieldCode,
+            String aggregation,
             String direction) {
+
+        public ViewSortSpec(String fieldId, String fieldCode, String direction) {
+            this(fieldId, fieldCode, null, direction);
+        }
     }
 
     public record ViewPage(

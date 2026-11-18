@@ -105,7 +105,17 @@ public final class DefaultQueryCompiler implements QueryCompiler {
                 aggregateOrderBy(table, request),
                 request.pageSize(),
                 request.offset(),
-                groupBy);
+                groupBy,
+                having(request));
+    }
+
+    private List<QueryPlan.HavingItem> having(QueryRequest request) {
+        List<QueryPlan.HavingItem> items = new ArrayList<>(request.having().size());
+        for (QueryRequest.HavingSpec condition : request.having()) {
+            items.add(new QueryPlan.HavingItem(
+                    condition.alias(), condition.operator(), condition.values()));
+        }
+        return items;
     }
 
     private List<QueryPlan.OrderItem> aggregateOrderBy(IrTable table, QueryRequest request) {

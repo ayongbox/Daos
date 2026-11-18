@@ -1,7 +1,9 @@
 package io.github.ayongbox.daos.core.ir;
 
+import io.github.ayongbox.daos.core.metadata.common.ConditionOperator;
 import io.github.ayongbox.daos.core.metadata.common.SortDirection;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -20,7 +22,8 @@ public record QueryRequest(
         int page,
         int pageSize,
         List<String> groupBy,
-        List<AggregateSpec> aggregates) {
+        List<AggregateSpec> aggregates,
+        List<HavingSpec> having) {
 
     public static final int MAX_PAGE_SIZE = 200;
     public static final int DEFAULT_PAGE_SIZE = 20;
@@ -56,6 +59,36 @@ public record QueryRequest(
         }
     }
 
+    /**
+     * HAVING 条件。{@code alias} 引用 {@link AggregateSpec#displayName()}。
+     */
+    public record HavingSpec(
+            String alias,
+            ConditionOperator operator,
+            List<Object> values) {
+
+        public HavingSpec {
+            Objects.requireNonNull(alias, "alias");
+            Objects.requireNonNull(operator, "operator");
+            values = values == null ? List.of() : List.copyOf(values);
+            switch (operator) {
+                case EQ, NE, GT, GTE, LT, LTE, IN, NOT_IN -> {
+                }
+                default -> throw new IllegalArgumentException(
+                        "HAVING 不支持运算符: " + operator.code());
+            }
+            if (values.isEmpty() || values.stream().anyMatch(Objects::isNull)) {
+                throw new IllegalArgumentException("HAVING 条件值不能为空: " + alias);
+            }
+        }
+
+        public HavingSpec(String alias, ConditionOperator operator, Object value) {
+            this(alias, operator, value instanceof List<?> list
+                    ? new ArrayList<Object>(list)
+                    : value == null ? List.of() : List.of(value));
+        }
+    }
+
     public QueryRequest {
         fieldCodes = fieldCodes == null ? List.of() : List.copyOf(fieldCodes);
         filter = filter == null ? FilterNode.alwaysTrue() : filter;
@@ -68,11 +101,21 @@ public record QueryRequest(
         }
         groupBy = groupBy == null ? List.of() : List.copyOf(groupBy);
         aggregates = aggregates == null ? List.of() : List.copyOf(aggregates);
+        having = having == null ? List.of() : List.copyOf(having);
 
         Set<String> aliases = new HashSet<>();
         for (AggregateSpec aggregate : aggregates) {
             if (!aliases.add(aggregate.displayName())) {
                 throw new IllegalArgumentException("聚合列名重复: " + aggregate.displayName());
+            }
+        }
+        if (!having.isEmpty() && aggregates.isEmpty()) {
+            throw new IllegalArgumentException("HAVING 条件必须配合聚合列使用");
+        }
+        for (HavingSpec condition : having) {
+            if (!aliases.contains(condition.alias())) {
+                throw new IllegalArgumentException(
+                        "HAVING 引用了不存在的聚合列: " + condition.alias());
             }
         }
         Set<String> groups = new HashSet<>();
@@ -90,6 +133,20 @@ public record QueryRequest(
     }
 
     /**
+     * 兼容尚未包含 HAVING 的聚合查询。
+     */
+    public QueryRequest(
+            List<String> fieldCodes,
+            FilterNode filter,
+            List<SortSpec> sorts,
+            int page,
+            int pageSize,
+            List<String> groupBy,
+            List<AggregateSpec> aggregates) {
+        this(fieldCodes, filter, sorts, page, pageSize, groupBy, aggregates, List.of());
+    }
+
+    /**
      * 兼容普通查询的构造方式。
      */
     public QueryRequest(
@@ -98,7 +155,7 @@ public record QueryRequest(
             List<SortSpec> sorts,
             int page,
             int pageSize) {
-        this(fieldCodes, filter, sorts, page, pageSize, List.of(), List.of());
+        this(fieldCodes, filter, sorts, page, pageSize, List.of(), List.of(), List.of());
     }
 
     public boolean aggregated() {

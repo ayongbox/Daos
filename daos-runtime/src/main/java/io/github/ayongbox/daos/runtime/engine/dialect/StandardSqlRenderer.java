@@ -54,6 +54,9 @@ final class StandardSqlRenderer implements SqlRenderer {
             select.groupBy().forEach(column -> groupBy.add(dialect.quote(column)));
             sql.append(" GROUP BY ").append(groupBy);
         }
+        if (!select.having().isEmpty()) {
+            sql.append(" HAVING ").append(renderHaving(select, parameters));
+        }
         if (!select.orderBy().isEmpty()) {
             sql.append(" ORDER BY ").append(renderOrderBy(select.orderBy()));
         }
@@ -69,6 +72,14 @@ final class StandardSqlRenderer implements SqlRenderer {
     @Override
     public SqlStatement renderCount(QueryPlan.Select select) {
         Objects.requireNonNull(select, "select");
+        if (select.aggregated() && !select.having().isEmpty()) {
+            // HAVING 可能过滤掉整组，直接数分组会多算，必须包一层子查询。
+            SqlStatement inner = render(select.forCount());
+            return new SqlStatement(
+                    "SELECT COUNT(*) AS " + dialect.quote("total")
+                            + " FROM (" + inner.sql() + ") " + dialect.quote("daos_grouped"),
+                    inner.parameters());
+        }
         if (select.aggregated() && select.groupBy().isEmpty()) {
             return new SqlStatement("SELECT 1 AS " + dialect.quote("total"), List.of());
         }
@@ -128,6 +139,47 @@ final class StandardSqlRenderer implements SqlRenderer {
             case MIN -> "MIN(" + column + ")";
             case MAX -> "MAX(" + column + ")";
         };
+    }
+
+    /**
+     * HAVING 用聚合表达式渲染而不是别名，避免 PostgreSQL 不支持 HAVING 引用别名。
+     */
+    private String renderHaving(QueryPlan.Select select, List<Object> parameters) {
+        StringJoiner joiner = new StringJoiner(" AND ", "(", ")");
+        for (QueryPlan.HavingItem condition : select.having()) {
+            QueryPlan.SelectItem item = select.items().stream()
+                    .filter(candidate -> candidate.alias().equals(condition.alias()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "HAVING 引用了未投影的聚合列: " + condition.alias()));
+            String expression = item.function() == null
+                    ? dialect.quote(item.column())
+                    : renderAggregate(item);
+            joiner.add(expression + " " + renderHavingOperator(condition, parameters));
+        }
+        return joiner.toString();
+    }
+
+    private String renderHavingOperator(QueryPlan.HavingItem condition, List<Object> parameters) {
+        List<Object> values = condition.values();
+        return switch (condition.operator()) {
+            case EQ -> "= " + bindSingle(values, parameters);
+            case NE -> "<> " + bindSingle(values, parameters);
+            case GT -> "> " + bindSingle(values, parameters);
+            case GTE -> ">= " + bindSingle(values, parameters);
+            case LT -> "< " + bindSingle(values, parameters);
+            case LTE -> "<= " + bindSingle(values, parameters);
+            case IN -> renderHavingIn(values, parameters, false);
+            case NOT_IN -> renderHavingIn(values, parameters, true);
+            default -> throw new UnsupportedOperationException(
+                    "HAVING 不支持运算符: " + condition.operator().code());
+        };
+    }
+
+    private String renderHavingIn(List<Object> values, List<Object> parameters, boolean negated) {
+        values.forEach(value -> parameters.add(requireValue(value)));
+        return (negated ? "NOT IN (" : "IN (")
+                + String.join(", ", Collections.nCopies(values.size(), "?")) + ")";
     }
 
     private String renderOrderBy(List<QueryPlan.OrderItem> orderBy) {

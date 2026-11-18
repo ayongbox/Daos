@@ -139,6 +139,35 @@ class DialectTest {
     }
 
     @Test
+    void rendersHavingWithAggregateExpressionAndCountsFilteredGroups() {
+        QueryPlan.Select plan = new QueryPlan.Select(
+                "app_demo_orders",
+                List.of(
+                        new QueryPlan.SelectItem("city", "city"),
+                        new QueryPlan.SelectItem("*", "记录数", AggregateFunction.COUNT),
+                        new QueryPlan.SelectItem("amount", "金额合计", AggregateFunction.SUM)),
+                FilterNode.alwaysTrue(),
+                List.of(new QueryPlan.OrderItem("金额合计", false)),
+                20,
+                0,
+                List.of("city"),
+                List.of(new QueryPlan.HavingItem(
+                        "记录数", ConditionOperator.GTE, List.of(2))));
+
+        SqlStatement statement = postgres.query().render(plan);
+        assertEquals("SELECT \"city\", COUNT(*) AS \"记录数\", SUM(\"amount\") AS \"金额合计\""
+                + " FROM \"app_demo_orders\" GROUP BY \"city\" HAVING (COUNT(*) >= ?)"
+                + " ORDER BY \"金额合计\" DESC LIMIT 20", statement.sql());
+        assertEquals(List.of(2), statement.parameters());
+
+        SqlStatement count = mysql.query().renderCount(plan);
+        assertEquals("SELECT COUNT(*) AS `total` FROM (SELECT `city`, COUNT(*) AS `记录数`,"
+                + " SUM(`amount`) AS `金额合计` FROM `app_demo_orders` GROUP BY `city`"
+                + " HAVING (COUNT(*) >= ?)) `daos_grouped`", count.sql());
+        assertEquals(List.of(2), count.parameters());
+    }
+
+    @Test
     void postgresUsesIlikeForContains() {
         QueryPlan.Select plan = new QueryPlan.Select(
                 "app_demo_orders",

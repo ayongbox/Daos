@@ -457,7 +457,8 @@ export interface ViewFilter {
 }
 
 export interface ViewSort {
-  fieldId: Ulid;
+  fieldId?: Ulid | null;
+  aggregation?: string | null;
   direction: SortDirection;
 }
 
@@ -476,6 +477,13 @@ export interface ViewAggregation {
   displayName: string;
 }
 
+/** 汇总视图的 HAVING 条件，aggregation 引用汇总列名称。 */
+export interface ViewHaving {
+  aggregation: string;
+  operator: ConditionOperator;
+  value?: unknown;
+}
+
 /** 列表视图：列、筛选与排序只引用表字段，不复制字段定义。 */
 export interface SchemaView extends AuditInfo {
   id: Ulid;
@@ -490,6 +498,7 @@ export interface SchemaView extends AuditInfo {
   sorts: ViewSort[];
   groupBy: Ulid[];
   aggregations: ViewAggregation[];
+  having: ViewHaving[];
   pageSize: number;
   status: MetadataStatus;
   ext: Record<string, unknown>;

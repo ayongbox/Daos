@@ -56,6 +56,18 @@ const FILTER_OPERATORS: Array<{ value: ConditionOperator; label: string }> = [
   { value: 'not_in', label: '不属于' }
 ];
 
+/** HAVING 只支持对汇总列的比较。 */
+const HAVING_OPERATORS: Array<{ value: ConditionOperator; label: string }> = [
+  { value: 'gt', label: '大于' },
+  { value: 'gte', label: '大于等于' },
+  { value: 'lt', label: '小于' },
+  { value: 'lte', label: '小于等于' },
+  { value: 'eq', label: '等于' },
+  { value: 'ne', label: '不等于' },
+  { value: 'in', label: '属于' },
+  { value: 'not_in', label: '不属于' }
+];
+
 function newId(): string {
   const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
   let time = Date.now();
@@ -118,6 +130,7 @@ function createView(app: SchemaApp, table: SchemaTable): SchemaView {
     sorts: [],
     groupBy: [],
     aggregations: [],
+    having: [],
     pageSize: 20,
     status: 'DRAFT',
     ext: {},
@@ -288,6 +301,26 @@ export function ViewDesigner({
         : [],
     [selectedView, viewTable]
   );
+
+  /** 汇总视图可按分组字段或汇总列排序；普通视图按任意表字段排序。 */
+  const sortOptions = useMemo(() => {
+    if (!selectedView || !viewTable) return [];
+    if (selectedView.aggregations.length === 0) {
+      return visibleFields(viewTable).map((field) => ({
+        value: field.id,
+        label: field.displayName
+      }));
+    }
+    return [
+      ...visibleFields(viewTable)
+        .filter((field) => selectedView.groupBy.includes(field.id))
+        .map((field) => ({ value: field.id, label: field.displayName })),
+      ...selectedView.aggregations.map((aggregate) => ({
+        value: `agg:${aggregate.displayName}`,
+        label: `汇总 · ${aggregate.displayName}`
+      }))
+    ];
+  }, [selectedView, viewTable]);
 
   function updateColumn(fieldId: string, update: (column: ViewColumn) => ViewColumn) {
     if (!selectedView) return;
@@ -648,24 +681,32 @@ export function ViewDesigner({
                         ) : (
                           <Space direction="vertical" style={{ width: '100%' }} size={6}>
                             {selectedView.sorts.map((sort, index) => (
-                              <Space key={`${sort.fieldId}-${index}`} size={6}>
+                              <Space key={`${sort.aggregation ?? sort.fieldId ?? 'sort'}-${index}`} size={6}>
                                 <Select
-                                  style={{ width: 150 }}
-                                  value={sort.fieldId || undefined}
-                                  options={(selectedView.aggregations.length > 0
-                                    ? visibleFields(viewTable).filter((field) =>
-                                        selectedView.groupBy.includes(field.id)
-                                      )
-                                    : visibleFields(viewTable)
-                                  ).map((field) => ({
-                                    value: field.id,
-                                    label: field.displayName
-                                  }))}
-                                  onChange={(fieldId) =>
+                                  style={{ width: 180 }}
+                                  value={
+                                    sort.aggregation
+                                      ? `agg:${sort.aggregation}`
+                                      : sort.fieldId ?? undefined
+                                  }
+                                  options={sortOptions}
+                                  onChange={(value: string) =>
                                     patchView(selectedView.id, (view) => ({
                                       ...view,
                                       sorts: view.sorts.map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, fieldId } : item
+                                        itemIndex === index
+                                          ? value.startsWith('agg:')
+                                            ? {
+                                                aggregation: value.slice(4),
+                                                fieldId: null,
+                                                direction: item.direction
+                                              }
+                                            : {
+                                                fieldId: value,
+                                                aggregation: null,
+                                                direction: item.direction
+                                              }
+                                          : item
                                       )
                                     }))
                                   }
@@ -744,7 +785,11 @@ export function ViewDesigner({
                                 patchView(selectedView.id, (view) => ({
                                   ...view,
                                   groupBy,
-                                  sorts: view.sorts.filter((sort) => groupBy.includes(sort.fieldId))
+                                  sorts: view.sorts.filter(
+                                    (sort) =>
+                                      sort.aggregation != null ||
+                                      groupBy.includes(sort.fieldId ?? '')
+                                  )
                                 }))
                               }
                             />
@@ -812,12 +857,133 @@ export function ViewDesigner({
                                     style={{ width: 160 }}
                                     placeholder="汇总列名称"
                                     value={aggregate.displayName}
+                                    onChange={(event) => {
+                                      const nextName = event.target.value;
+                                      patchView(selectedView.id, (view) => {
+                                        const previousName = view.aggregations[index]?.displayName;
+                                        return {
+                                          ...view,
+                                          aggregations: view.aggregations.map(
+                                            (item, itemIndex) =>
+                                              itemIndex === index
+                                                ? { ...item, displayName: nextName }
+                                                : item
+                                          ),
+                                          having: view.having.map((item) =>
+                                            item.aggregation === previousName
+                                              ? { ...item, aggregation: nextName }
+                                              : item
+                                          ),
+                                          sorts: view.sorts.map((item) =>
+                                            item.aggregation === previousName
+                                              ? { ...item, aggregation: nextName }
+                                              : item
+                                          )
+                                        };
+                                      });
+                                    }}
+                                  />
+                                  <Button
+                                    size="small"
+                                    type="text"
+                                    danger
+                                    onClick={() =>
+                                      patchView(selectedView.id, (view) => {
+                                        const removed = view.aggregations[index]?.displayName;
+                                        return {
+                                          ...view,
+                                          aggregations: view.aggregations.filter(
+                                            (_, itemIndex) => itemIndex !== index
+                                          ),
+                                          having: view.having.filter(
+                                            (item) => item.aggregation !== removed
+                                          ),
+                                          sorts: view.sorts.filter(
+                                            (item) => item.aggregation !== removed
+                                          )
+                                        };
+                                      })
+                                    }
+                                  >
+                                    删除
+                                  </Button>
+                                </Space>
+                              ))}
+                              <Space size={8} wrap style={{ marginTop: 4 }}>
+                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                  HAVING 条件（汇总后过滤）：
+                                </Typography.Text>
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  onClick={() =>
+                                    patchView(selectedView.id, (view) => ({
+                                      ...view,
+                                      having: [
+                                        ...view.having,
+                                        {
+                                          aggregation: view.aggregations[0]?.displayName ?? '',
+                                          operator: 'gt',
+                                          value: 0
+                                        }
+                                      ]
+                                    }))
+                                  }
+                                >
+                                  添加条件
+                                </Button>
+                              </Space>
+                              {selectedView.having.map((condition, index) => (
+                                <Space
+                                  key={`${condition.aggregation}-${index}`}
+                                  size={6}
+                                  wrap
+                                >
+                                  <Select
+                                    style={{ width: 140 }}
+                                    value={condition.aggregation || undefined}
+                                    options={selectedView.aggregations.map((aggregate) => ({
+                                      value: aggregate.displayName,
+                                      label: aggregate.displayName
+                                    }))}
+                                    onChange={(aggregation: string) =>
+                                      patchView(selectedView.id, (view) => ({
+                                        ...view,
+                                        having: view.having.map((item, itemIndex) =>
+                                          itemIndex === index ? { ...item, aggregation } : item
+                                        )
+                                      }))
+                                    }
+                                  />
+                                  <Select
+                                    style={{ width: 110 }}
+                                    value={condition.operator}
+                                    options={HAVING_OPERATORS}
+                                    onChange={(operator: ConditionOperator) =>
+                                      patchView(selectedView.id, (view) => ({
+                                        ...view,
+                                        having: view.having.map((item, itemIndex) =>
+                                          itemIndex === index ? { ...item, operator } : item
+                                        )
+                                      }))
+                                    }
+                                  />
+                                  <Input
+                                    style={{ width: 160 }}
+                                    placeholder="多个值用逗号分隔"
+                                    value={filterText(condition.value)}
                                     onChange={(event) =>
                                       patchView(selectedView.id, (view) => ({
                                         ...view,
-                                        aggregations: view.aggregations.map((item, itemIndex) =>
+                                        having: view.having.map((item, itemIndex) =>
                                           itemIndex === index
-                                            ? { ...item, displayName: event.target.value }
+                                            ? {
+                                                ...item,
+                                                value: parseFilterValue(
+                                                  item.operator,
+                                                  event.target.value
+                                                )
+                                              }
                                             : item
                                         )
                                       }))
@@ -830,7 +996,7 @@ export function ViewDesigner({
                                     onClick={() =>
                                       patchView(selectedView.id, (view) => ({
                                         ...view,
-                                        aggregations: view.aggregations.filter(
+                                        having: view.having.filter(
                                           (_, itemIndex) => itemIndex !== index
                                         )
                                       }))
@@ -841,7 +1007,7 @@ export function ViewDesigner({
                                 </Space>
                               ))}
                               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                汇总视图运行端只展示分组字段与汇总列；排序需使用分组字段。
+                                汇总视图运行端只展示分组字段与汇总列；排序可用分组字段或汇总列。
                               </Typography.Text>
                             </Space>
                           )}

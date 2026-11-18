@@ -93,7 +93,7 @@ public final class PermissionRewriter {
 
         return new QueryPlan.Select(
                 plan.physicalTable(), items, conjoin(predicates), plan.orderBy(),
-                plan.limit(), plan.offset(), plan.groupBy());
+                plan.limit(), plan.offset(), plan.groupBy(), plan.having());
     }
 
     /**

@@ -25,6 +25,7 @@ public record SchemaView(
         List<ViewSort> sorts,
         List<String> groupBy,
         List<ViewAggregation> aggregations,
+        List<ViewHaving> having,
         int pageSize,
         MetadataStatus status,
         Map<String, Object> ext,
@@ -52,10 +53,41 @@ public record SchemaView(
         sorts = sorts == null ? List.of() : List.copyOf(sorts);
         groupBy = groupBy == null ? List.of() : List.copyOf(groupBy);
         aggregations = aggregations == null ? List.of() : List.copyOf(aggregations);
+        having = having == null ? List.of() : List.copyOf(having);
         pageSize = pageSize <= 0 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         status = status == null ? MetadataStatus.DRAFT : status;
         ext = ext == null ? Map.of() : Map.copyOf(ext);
         schemaVersion = schemaVersion == 0 ? 1 : schemaVersion;
+    }
+
+    /**
+     * 兼容尚未包含 HAVING 的调用方。
+     */
+    public SchemaView(
+            String id,
+            String appId,
+            String tableId,
+            String code,
+            String displayName,
+            String description,
+            ViewType viewType,
+            List<ViewColumn> columns,
+            List<ViewFilter> filters,
+            List<ViewSort> sorts,
+            List<String> groupBy,
+            List<ViewAggregation> aggregations,
+            int pageSize,
+            MetadataStatus status,
+            Map<String, Object> ext,
+            String createdBy,
+            String createdAt,
+            String updatedBy,
+            String updatedAt,
+            boolean deleted,
+            int schemaVersion) {
+        this(id, appId, tableId, code, displayName, description, viewType,
+                columns, filters, sorts, groupBy, aggregations, List.of(), pageSize, status, ext,
+                createdBy, createdAt, updatedBy, updatedAt, deleted, schemaVersion);
     }
 
     /**
@@ -82,7 +114,7 @@ public record SchemaView(
             boolean deleted,
             int schemaVersion) {
         this(id, appId, tableId, code, displayName, description, viewType,
-                columns, filters, sorts, List.of(), List.of(), pageSize, status, ext,
+                columns, filters, sorts, List.of(), List.of(), List.of(), pageSize, status, ext,
                 createdBy, createdAt, updatedBy, updatedAt, deleted, schemaVersion);
     }
 }

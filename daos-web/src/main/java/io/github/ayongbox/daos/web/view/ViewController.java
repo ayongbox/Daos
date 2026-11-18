@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 视图运行时接口。只读取生效快照，草稿中的视图配置发布后才可见。
@@ -68,6 +69,15 @@ public class ViewController {
             HttpServletRequest servletRequest) {
         require(appId, READ_PERMISSION);
         return R.ok(viewService.query(appId, viewCode, current, size, context(servletRequest, appId)));
+    }
+
+    @GetMapping("/{viewCode}/summary")
+    public R<Map<String, Object>> summary(
+            @PathVariable String appId,
+            @PathVariable String viewCode,
+            HttpServletRequest servletRequest) {
+        require(appId, READ_PERMISSION);
+        return R.ok(viewService.summary(appId, viewCode, context(servletRequest, appId)));
     }
 
     @GetMapping("/{viewCode}/aggregate")

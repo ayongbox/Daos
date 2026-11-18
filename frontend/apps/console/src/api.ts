@@ -152,8 +152,9 @@ export interface ViewFilterSpec {
 }
 
 export interface ViewSortSpec {
-  fieldId: string;
-  fieldCode: string;
+  fieldId: string | null;
+  fieldCode: string | null;
+  aggregation: string | null;
   direction: 'ASC' | 'DESC';
 }
 
@@ -256,6 +257,10 @@ export const api = {
   viewAggregate: (appId: string, viewCode: string, current = 1, size = 0) =>
     client.get<ViewAggregatePage>(
       `/api/apps/${appId}/views/${encodeURIComponent(viewCode)}/aggregate?current=${current}&size=${size}`
+    ),
+  viewSummary: (appId: string, viewCode: string) =>
+    client.get<Record<string, unknown>>(
+      `/api/apps/${appId}/views/${encodeURIComponent(viewCode)}/summary`
     ),
   menus: (appId: string) => client.get<MenuSummary[]>(`/api/apps/${appId}/menus`)
 };

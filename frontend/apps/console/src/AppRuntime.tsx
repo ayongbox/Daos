@@ -5,6 +5,8 @@ import {
   Card,
   Empty,
   Menu,
+  Segmented,
+  Select,
   Space,
   Spin,
   Table,
@@ -31,11 +33,91 @@ function displayValue(value: unknown): string {
   return String(value);
 }
 
+function metricValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(numeric);
+  }
+  return String(value);
+}
+
+/** 无图表库的横向条形图，按分组结果展示单个汇总指标。 */
+function GroupBars({
+  rows,
+  groupCodes,
+  metric
+}: {
+  rows: Record<string, unknown>[];
+  groupCodes: string[];
+  metric: string;
+}) {
+  if (rows.length === 0) return <Empty description="暂无数据" />;
+  const max = rows.reduce((acc, row) => {
+    const value = Number(row[metric]);
+    return Number.isFinite(value) ? Math.max(acc, value) : acc;
+  }, 0);
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={8}>
+      {rows.map((row, index) => {
+        const raw = row[metric];
+        const value = Number(raw);
+        const width =
+          max > 0 && Number.isFinite(value) ? Math.max((value / max) * 100, 2) : 0;
+        const label =
+          groupCodes.map((code) => displayValue(row[code])).join(' / ') || `分组 ${index + 1}`;
+        return (
+          <div key={`${label}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Typography.Text
+              ellipsis
+              style={{ width: 160, flex: '0 0 160px', fontSize: tokens.fontSizeSm }}
+            >
+              {label}
+            </Typography.Text>
+            <div
+              style={{
+                flex: 1,
+                height: 16,
+                borderRadius: 4,
+                background: tokens.colorFillTertiary
+              }}
+            >
+              <div
+                style={{
+                  width: `${width}%`,
+                  height: '100%',
+                  borderRadius: 4,
+                  background: tokens.colorPrimary
+                }}
+              />
+            </div>
+            <Typography.Text
+              style={{
+                width: 96,
+                flex: '0 0 96px',
+                textAlign: 'right',
+                fontVariantNumeric: 'tabular-nums'
+              }}
+            >
+              {metricValue(raw)}
+            </Typography.Text>
+          </div>
+        );
+      })}
+    </Space>
+  );
+}
+
 function ViewRuntime({ appId, viewCode }: { appId: string; viewCode: string }) {
   const { message } = AntApp.useApp();
   const [detail, setDetail] = useState<ViewDetail | null>(null);
   const [page, setPage] = useState<ViewPage | null>(null);
   const [aggregatePage, setAggregatePage] = useState<ViewAggregatePage | null>(null);
+  const [summary, setSummary] = useState<Record<string, unknown> | null>(null);
+  const [boardPage, setBoardPage] = useState<ViewAggregatePage | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'board'>('table');
+  const [metric, setMetric] = useState<string | null>(null);
   const [current, setCurrent] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -44,6 +126,10 @@ function ViewRuntime({ appId, viewCode }: { appId: string; viewCode: string }) {
     setDetail(null);
     setPage(null);
     setAggregatePage(null);
+    setSummary(null);
+    setBoardPage(null);
+    setMetric(null);
+    setViewMode('table');
     setCurrent(1);
     setLoading(true);
     api
@@ -96,7 +182,50 @@ function ViewRuntime({ appId, viewCode }: { appId: string; viewCode: string }) {
     };
   }, [appId, viewCode, current, detail]);
 
+  useEffect(() => {
+    if (!detail || detail.aggregations.length === 0) {
+      setSummary(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .viewSummary(appId, viewCode)
+      .then((value) => {
+        if (!cancelled) setSummary(value);
+      })
+      .catch((cause) => {
+        if (!cancelled && !(cause instanceof ApiError && cause.status === 401)) {
+          message.error(cause instanceof Error ? cause.message : '汇总数据加载失败');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appId, viewCode, detail]);
+
+  useEffect(() => {
+    if (!detail || detail.aggregations.length === 0 || viewMode !== 'board') {
+      setBoardPage(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .viewAggregate(appId, viewCode, 1, 200)
+      .then((value) => {
+        if (!cancelled) setBoardPage(value);
+      })
+      .catch((cause) => {
+        if (!cancelled && !(cause instanceof ApiError && cause.status === 401)) {
+          message.error(cause instanceof Error ? cause.message : '看板数据加载失败');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appId, viewCode, detail, viewMode]);
+
   const aggregated = (detail?.aggregations.length ?? 0) > 0;
+  const activeMetric = metric ?? detail?.aggregations[0]?.displayName ?? null;
 
   const columns: ColumnsType<Record<string, unknown>> = useMemo(() => {
     if (detail && aggregated) {
@@ -164,32 +293,99 @@ function ViewRuntime({ appId, viewCode }: { appId: string; viewCode: string }) {
             </Tag>
           ))}
           {detail?.sorts.map((sort) => (
-            <Tag key={`${sort.fieldCode}-${sort.direction}`}>
-              排序 {sort.fieldCode} {sort.direction === 'ASC' ? '升序' : '降序'}
+            <Tag key={`${sort.aggregation ?? sort.fieldCode}-${sort.direction}`}>
+              排序 {sort.aggregation ?? sort.fieldCode} {sort.direction === 'ASC' ? '升序' : '降序'}
             </Tag>
           ))}
+          {aggregated ? (
+            <Segmented
+              size="small"
+              value={viewMode}
+              onChange={(value) => setViewMode(value as 'table' | 'board')}
+              options={[
+                { label: '表格', value: 'table' },
+                { label: '看板', value: 'board' }
+              ]}
+            />
+          ) : null}
         </Space>
       </Card>
-      <Card size="small">
-        <Table
-          rowKey={(record) =>
-            String(record.id ?? record.record_id ?? record._id ?? JSON.stringify(record))
-          }
-          size="small"
-          loading={loading}
-          columns={columns}
-          dataSource={(aggregated ? aggregatePage?.rows : page?.records) ?? []}
-          locale={{ emptyText: '暂无数据' }}
-          scroll={{ x: 720 }}
-          pagination={{
-            current: (aggregated ? aggregatePage?.current : page?.current) ?? 1,
-            pageSize: (aggregated ? aggregatePage?.size : page?.size) ?? detail?.pageSize ?? 20,
-            total: (aggregated ? aggregatePage?.total : page?.total) ?? 0,
-            showSizeChanger: false,
-            onChange: (next) => setCurrent(next)
-          }}
-        />
-      </Card>
+      {aggregated && viewMode === 'board' ? (
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {(detail?.aggregations ?? []).map((aggregate) => (
+              <Card
+                key={aggregate.displayName}
+                size="small"
+                style={{ minWidth: 160, flex: '1 1 160px' }}
+              >
+                <Typography.Text type="secondary" style={{ fontSize: tokens.fontSizeSm }}>
+                  {aggregate.displayName}
+                </Typography.Text>
+                <Typography.Title level={3} style={{ margin: 0 }}>
+                  {metricValue(summary?.[aggregate.displayName])}
+                </Typography.Title>
+              </Card>
+            ))}
+          </div>
+          <Card
+            size="small"
+            title="分组分布"
+            extra={
+              detail && detail.aggregations.length > 1 ? (
+                <Select
+                  size="small"
+                  style={{ width: 160 }}
+                  value={activeMetric ?? undefined}
+                  onChange={setMetric}
+                  options={detail.aggregations.map((aggregate) => ({
+                    value: aggregate.displayName,
+                    label: aggregate.displayName
+                  }))}
+                />
+              ) : null
+            }
+          >
+            <Space direction="vertical" style={{ width: '100%' }} size={8}>
+              {detail && detail.groupBy.length > 0 && activeMetric ? (
+                <GroupBars
+                  rows={boardPage?.rows ?? []}
+                  groupCodes={detail.groupBy.map((group) => group.fieldCode)}
+                  metric={activeMetric}
+                />
+              ) : (
+                <Empty description="该视图未配置分组，看板仅展示指标卡" />
+              )}
+              {boardPage && boardPage.total > boardPage.size ? (
+                <Typography.Text type="secondary" style={{ fontSize: tokens.fontSizeSm }}>
+                  共 {boardPage.total} 组，图表仅展示前 {boardPage.size} 组
+                </Typography.Text>
+              ) : null}
+            </Space>
+          </Card>
+        </Space>
+      ) : (
+        <Card size="small">
+          <Table
+            rowKey={(record) =>
+              String(record.id ?? record.record_id ?? record._id ?? JSON.stringify(record))
+            }
+            size="small"
+            loading={loading}
+            columns={columns}
+            dataSource={(aggregated ? aggregatePage?.rows : page?.records) ?? []}
+            locale={{ emptyText: '暂无数据' }}
+            scroll={{ x: 720 }}
+            pagination={{
+              current: (aggregated ? aggregatePage?.current : page?.current) ?? 1,
+              pageSize: (aggregated ? aggregatePage?.size : page?.size) ?? detail?.pageSize ?? 20,
+              total: (aggregated ? aggregatePage?.total : page?.total) ?? 0,
+              showSizeChanger: false,
+              onChange: (next) => setCurrent(next)
+            }}
+          />
+        </Card>
+      )}
     </Space>
   );
 }

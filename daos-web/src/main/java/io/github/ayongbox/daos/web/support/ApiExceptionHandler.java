@@ -6,6 +6,7 @@ import io.github.ayongbox.daos.runtime.auth.AuthenticationException;
 import io.github.ayongbox.daos.runtime.exec.WriteConflictException;
 import io.github.ayongbox.daos.runtime.identity.AccessDeniedException;
 import io.github.ayongbox.daos.runtime.permission.PermissionRewriteException;
+import io.github.ayongbox.daos.runtime.view.AppNotPublishedException;
 
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -36,6 +37,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(PermissionRewriteException.class)
     public ResponseEntity<R<Void>> handlePermissionDenied(PermissionRewriteException error) {
         return fail(403, CommonErrorCode.FORBIDDEN, error.getMessage());
+    }
+
+    @ExceptionHandler(AppNotPublishedException.class)
+    public ResponseEntity<R<Void>> handleNotPublished(AppNotPublishedException error) {
+        return fail(404, CommonErrorCode.NOT_FOUND, error.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
