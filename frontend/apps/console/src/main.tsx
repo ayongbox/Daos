@@ -1,28 +1,83 @@
-import { StrictMode } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Typography } from 'antd';
-import { AppShell } from '@daos/app-shell';
+import { App as AntApp, Spin } from 'antd';
+import { ThemeProvider } from '@daos/app-shell';
+import './app.css';
+import { LoginPage } from './LoginPage';
+import { ModelerPage } from './ModelerPage';
+import { AUTH_EXPIRED_EVENT, api, tokenStore } from './api';
 
-const menuItems = [
-  { key: 'apps', label: '应用管理' },
-  { key: 'model', label: '数据建模' },
-  { key: 'form', label: '表单设计' },
-  { key: 'flow', label: '流程设计' },
-  { key: 'permission', label: '权限配置' }
-];
+type AuthState = 'checking' | 'authenticated' | 'anonymous';
 
-function App() {
+function Console() {
+  const [auth, setAuth] = useState<AuthState>(() =>
+    tokenStore.get() ? 'checking' : 'anonymous'
+  );
+
+  useEffect(() => {
+    const expire = () => {
+      tokenStore.clear();
+      setAuth('anonymous');
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, expire);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expire);
+  }, []);
+
+  useEffect(() => {
+    if (auth !== 'checking') return;
+    let cancelled = false;
+    api
+      .me()
+      .then(() => {
+        if (!cancelled) setAuth('authenticated');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        tokenStore.clear();
+        setAuth('anonymous');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth]);
+
+  const logout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // 会话可能已过期，本地令牌仍需清除
+    } finally {
+      tokenStore.clear();
+      setAuth('anonymous');
+    }
+  };
+
   return (
-    <AppShell title="道生 · 控制台" menuItems={menuItems} defaultSelectedKey="apps">
-      <Typography.Paragraph type="secondary">
-        元数据 Schema v1 已冻结：表、字段、表单、权限四类契约是设计器与运行时的唯一来源。
-      </Typography.Paragraph>
-    </AppShell>
+    <ThemeProvider>
+      <AntApp>
+        {auth === 'checking' ? (
+          <div
+            style={{
+              minHeight: '100vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <Spin />
+          </div>
+        ) : auth === 'authenticated' ? (
+          <ModelerPage onLogout={logout} />
+        ) : (
+          <LoginPage onLoggedIn={() => setAuth('authenticated')} />
+        )}
+      </AntApp>
+    </ThemeProvider>
   );
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Console />
   </StrictMode>
 );

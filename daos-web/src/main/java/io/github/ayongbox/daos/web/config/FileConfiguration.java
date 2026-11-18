@@ -5,11 +5,9 @@ import io.github.ayongbox.daos.core.spi.FileStore;
 import io.github.ayongbox.daos.runtime.file.FileDownloadTokens;
 import io.github.ayongbox.daos.runtime.file.FileService;
 import io.github.ayongbox.daos.runtime.file.LocalObjectStorageService;
-import io.github.ayongbox.daos.runtime.store.InMemoryFileStore;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -35,12 +33,6 @@ public class FileConfiguration {
             matchIfMissing = true)
     public ObjectStorageService localObjectStorageService(DaosFileProperties properties) {
         return new LocalObjectStorageService(Path.of(properties.getLocalRoot()));
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public FileStore fileStore() {
-        return new InMemoryFileStore();
     }
 
     @Bean

@@ -66,8 +66,13 @@ public final class PermissionRuleMatcher {
         if (rule.type() != target.type()) {
             return false;
         }
-        if (!rule.appCode().equals(target.appCode())
-                || !Objects.equals(rule.objectCode(), target.objectCode())) {
+        if (!rule.appCode().equals(target.appCode())) {
+            return false;
+        }
+        // 表规则省略 objectCode 表示应用内全部表，与运行时数据访问的匹配语义一致。
+        boolean wildcardTable = rule.type() == ResourceType.TABLE
+                && (rule.objectCode() == null || rule.objectCode().isBlank());
+        if (!wildcardTable && !Objects.equals(rule.objectCode(), target.objectCode())) {
             return false;
         }
         if (rule.type() != ResourceType.FIELD) {

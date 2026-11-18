@@ -2,6 +2,7 @@ package io.github.ayongbox.daos.core.spi;
 
 import io.github.ayongbox.daos.core.metadata.app.SchemaApp;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -12,6 +13,8 @@ import java.util.Optional;
 public interface MetadataStore {
 
     Optional<SchemaApp> findDraft(String appId);
+
+    List<SchemaApp> findAllDrafts();
 
     void saveDraft(SchemaApp app);
 }

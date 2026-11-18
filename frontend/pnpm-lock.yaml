@@ -20,6 +20,9 @@ importers:
 
   apps/console:
     dependencies:
+      '@ant-design/icons':
+        specifier: ^5.6.1
+        version: 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@daos/app-shell':
         specifier: workspace:*
         version: link:../../packages/app-shell

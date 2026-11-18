@@ -1,9 +1,10 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:daos;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: ""
+    # 默认文件库，重启保留；生产可用 DAOS_DB_URL 指向 PostgreSQL
+    url: ${DAOS_DB_URL:jdbc:h2:file:./data/daos;AUTO_SERVER=TRUE}
+    driver-class-name: ${DAOS_DB_DRIVER:org.h2.Driver}
+    username: ${DAOS_DB_USERNAME:sa}
+    password: ${DAOS_DB_PASSWORD:}
 
 baseon:
   web:
@@ -12,6 +13,11 @@ baseon:
       enabled: false
 
 daos:
+  auth:
+    # 首次启动创建引导账号；三项齐全才创建，已存在则忽略
+    bootstrap-tenant: ${DAOS_BOOTSTRAP_TENANT:}
+    bootstrap-username: ${DAOS_BOOTSTRAP_USERNAME:}
+    bootstrap-password: ${DAOS_BOOTSTRAP_PASSWORD:}
   file:
     storage: local
     local-root: ./data/files

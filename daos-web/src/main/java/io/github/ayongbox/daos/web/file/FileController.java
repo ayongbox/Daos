@@ -36,8 +36,8 @@ import java.nio.charset.StandardCharsets;
 @RestController
 public class FileController {
 
-    private static final String READ_PERMISSION = "file:read";
-    private static final String CREATE_PERMISSION = "file:create";
+    private static final String DOWNLOAD_PERMISSION = "file:download";
+    private static final String UPLOAD_PERMISSION = "file:upload";
     private static final String DELETE_PERMISSION = "file:delete";
 
     private final FileService fileService;
@@ -59,7 +59,7 @@ public class FileController {
             @PathVariable String appId,
             @RequestParam("file") MultipartFile file,
             HttpServletRequest request) {
-        requirePermission(appId, CREATE_PERMISSION);
+        requirePermission(appId, UPLOAD_PERMISSION);
         Session session = session(request);
         try (InputStream in = file.getInputStream()) {
             FileObject stored = fileService.upload(
@@ -76,7 +76,7 @@ public class FileController {
             @PathVariable String appId,
             @PathVariable String fileId,
             HttpServletRequest request) {
-        requirePermission(appId, READ_PERMISSION);
+        requirePermission(appId, DOWNLOAD_PERMISSION);
         Session session = session(request);
         return R.ok(fileService.require(session.tenantId(), appId, fileId).reference());
     }
@@ -86,7 +86,7 @@ public class FileController {
             @PathVariable String appId,
             @PathVariable String fileId,
             HttpServletRequest request) {
-        requirePermission(appId, READ_PERMISSION);
+        requirePermission(appId, DOWNLOAD_PERMISSION);
         Session session = session(request);
         return R.ok(fileService.signedLink(session.tenantId(), appId, fileId));
     }
@@ -96,7 +96,7 @@ public class FileController {
             @PathVariable String appId,
             @PathVariable String fileId,
             HttpServletRequest request) {
-        requirePermission(appId, READ_PERMISSION);
+        requirePermission(appId, DOWNLOAD_PERMISSION);
         Session session = session(request);
         FileObject file = fileService.require(session.tenantId(), appId, fileId);
         return stream(file, fileService.open(session.tenantId(), appId, fileId));

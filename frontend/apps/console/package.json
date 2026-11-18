@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ant-design/icons": "^5.6.1",
     "@daos/app-shell": "workspace:*",
     "@daos/designer": "workspace:*",
     "@daos/metadata": "workspace:*",

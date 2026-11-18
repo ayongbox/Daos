@@ -5,5 +5,7 @@ package io.github.ayongbox.daos.core.pipeline;
  */
 public enum Dialect {
     MYSQL,
-    POSTGRESQL
+    POSTGRESQL,
+    /** 仅用于本地开发与测试。 */
+    H2
 }

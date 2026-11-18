@@ -93,6 +93,22 @@ class PermissionRewriterTest {
     }
 
     @Test
+    void wildcardTableRuleAppliesToAnyTable() {
+        SchemaPermission rule = new SchemaPermission(
+                "owner_tables", APP_ID, "owner_tables", "应用内全部表", null,
+                new PermissionSubject(SubjectType.PUBLIC, null, true),
+                new ResourceRef(ResourceType.TABLE, APP_CODE, null, List.of()),
+                List.of(ActionType.READ), EffectType.ALLOW, null, null, null,
+                100, true, null, null, false, Map.of(),
+                "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
+
+        SqlStatement sql = rewrite(request("title"), context(List.of(rule)));
+
+        assertFalse(sql.sql().contains("1 = 0"));
+        assertTrue(sql.parameters().contains("tenant-1"));
+    }
+
+    @Test
     void injectsTenantAndSoftDeleteForAllowedRule() {
         SqlStatement sql = rewrite(request("title"), context(List.of(allowAll("p1"))));
 

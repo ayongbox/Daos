@@ -78,7 +78,7 @@ class SessionPermissionServiceTest {
         InMemoryIdentityStore identityStore = new InMemoryIdentityStore(
                 null, List.of(member), List.of(role), List.of(binding));
         service = new SessionPermissionService(
-                snapshotStore, new PermissionContextFactory(identityStore));
+                snapshotStore, metadataStore, new PermissionContextFactory(identityStore));
     }
 
     @Test
@@ -105,7 +105,7 @@ class SessionPermissionServiceTest {
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> service.resolve(session("m-1"), "app-missing"));
 
-        assertTrue(error.getMessage().contains("没有生效版本"));
+        assertTrue(error.getMessage().contains("没有草稿或生效版本"));
     }
 
     private static Session session(String memberId) {

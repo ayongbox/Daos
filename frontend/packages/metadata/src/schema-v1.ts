@@ -44,6 +44,36 @@ export type FieldLogicalType =
   | 'attachment' | 'relation' | 'rollup' | 'formula' | 'auto_number'
   | 'rating' | 'progress' | 'location' | 'barcode';
 
+/** 字段类型的界面名称，只用于展示，不参与协议。 */
+export const FIELD_TYPE_LABELS: Record<FieldLogicalType, string> = {
+  text_short: '单行文本',
+  text_long: '多行文本',
+  rich_text: '富文本',
+  email: '邮箱',
+  phone: '电话',
+  url: '链接',
+  number: '数字',
+  decimal: '小数',
+  date: '日期',
+  datetime: '日期时间',
+  select: '单选',
+  multi_select: '多选',
+  boolean: '是 / 否',
+  member: '成员',
+  member_multi: '成员（多选）',
+  department: '部门',
+  department_multi: '部门（多选）',
+  attachment: '附件',
+  relation: '关联记录',
+  rollup: '引用汇总',
+  formula: '公式',
+  auto_number: '自动编号',
+  rating: '评分',
+  progress: '进度',
+  location: '地理位置',
+  barcode: '条码'
+};
+
 export type FormComponent =
   | 'input' | 'textarea' | 'richtext' | 'number' | 'currency' | 'percent' | 'password'
   | 'select' | 'multi_select' | 'radio' | 'checkbox' | 'switch' | 'cascader' | 'tree_select'
@@ -220,6 +250,19 @@ export interface RelationDef {
   reverseFieldId?: string | null;
   filterExpression?: string | null;
   enabled: boolean;
+}
+
+export interface SchemaApp extends AuditInfo {
+  id: Ulid;
+  code: string;
+  displayName: string;
+  description?: string | null;
+  icon?: string | null;
+  status: MetadataStatus;
+  tables: SchemaTable[];
+  forms: SchemaForm[];
+  permissions: SchemaPermission[];
+  ext: Record<string, unknown>;
 }
 
 export interface SchemaTable extends AuditInfo {

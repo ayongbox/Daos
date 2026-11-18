@@ -8,18 +8,15 @@ import io.github.ayongbox.daos.core.metadata.identity.OrgMember;
 import io.github.ayongbox.daos.core.spi.AccountStore;
 import io.github.ayongbox.daos.core.spi.AuditStore;
 import io.github.ayongbox.daos.core.spi.IdentityStore;
+import io.github.ayongbox.daos.core.spi.MetadataStore;
 import io.github.ayongbox.daos.core.spi.SessionStore;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
 import io.github.ayongbox.daos.runtime.audit.AuditLog;
-import io.github.ayongbox.daos.runtime.audit.InMemoryAuditStore;
+import io.github.ayongbox.daos.runtime.app.AppService;
 import io.github.ayongbox.daos.runtime.auth.AuthenticationService;
-import io.github.ayongbox.daos.runtime.auth.InMemoryAccountStore;
-import io.github.ayongbox.daos.runtime.auth.InMemorySessionStore;
 import io.github.ayongbox.daos.runtime.auth.Pbkdf2PasswordHasher;
-import io.github.ayongbox.daos.runtime.identity.InMemoryIdentityStore;
 import io.github.ayongbox.daos.runtime.identity.PermissionContextFactory;
 import io.github.ayongbox.daos.runtime.identity.SessionPermissionService;
-import io.github.ayongbox.daos.runtime.store.InMemorySnapshotStore;
 import io.github.ayongbox.baseon.core.secure.PermissionChecker;
 import io.github.ayongbox.baseon.starter.trace.TraceIdUtil;
 import io.github.ayongbox.daos.web.auth.DaosPermissionChecker;
@@ -36,7 +33,7 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * 认证相关装配。当前使用内存仓储，持久化实现接入后替换这里的 Bean 即可。
+ * 认证相关装配。仓储由 {@link PersistenceConfiguration} 提供，本类只负责服务与权限链路。
  *
  * <p>通过 {@code daos.auth.bootstrap-*} 配置提供首个账号，未配置时不创建任何账号。</p>
  */
@@ -46,38 +43,13 @@ public class AuthConfiguration {
     private static final Logger log = LoggerFactory.getLogger(AuthConfiguration.class);
 
     @Bean
-    public AccountStore accountStore() {
-        return new InMemoryAccountStore();
-    }
-
-    @Bean
-    public SessionStore sessionStore() {
-        return new InMemorySessionStore();
-    }
-
-    @Bean
     public PasswordHasher passwordHasher() {
         return new Pbkdf2PasswordHasher();
     }
 
     @Bean
-    public AuditStore auditStore() {
-        return new InMemoryAuditStore();
-    }
-
-    @Bean
     public AuditLog auditLog(AuditStore auditStore) {
         return new AuditLog(auditStore, Clock.systemUTC(), TraceIdUtil::get);
-    }
-
-    @Bean
-    public IdentityStore identityStore() {
-        return new InMemoryIdentityStore(null, null, null, null);
-    }
-
-    @Bean
-    public SnapshotStore snapshotStore() {
-        return new InMemorySnapshotStore();
     }
 
     @Bean
@@ -87,8 +59,15 @@ public class AuthConfiguration {
 
     @Bean
     public SessionPermissionService sessionPermissionService(
-            SnapshotStore snapshotStore, PermissionContextFactory permissionContextFactory) {
-        return new SessionPermissionService(snapshotStore, permissionContextFactory);
+            SnapshotStore snapshotStore,
+            MetadataStore metadataStore,
+            PermissionContextFactory permissionContextFactory) {
+        return new SessionPermissionService(snapshotStore, metadataStore, permissionContextFactory);
+    }
+
+    @Bean
+    public AppService appService(MetadataStore metadataStore, IdentityStore identityStore) {
+        return new AppService(metadataStore, identityStore, Clock.systemUTC());
     }
 
     @Bean

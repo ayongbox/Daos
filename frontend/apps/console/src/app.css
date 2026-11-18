@@ -1,0 +1,20 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* 行内操作默认隐藏，hover 或键盘聚焦时出现 */
+.daos-row-actions {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.ant-table-row:hover .daos-row-actions,
+.ant-table-row:focus-within .daos-row-actions {
+  opacity: 1;
+}

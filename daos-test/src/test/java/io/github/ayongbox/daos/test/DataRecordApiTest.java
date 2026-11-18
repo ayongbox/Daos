@@ -115,7 +115,9 @@ class DataRecordApiTest {
 
         AuditLog auditLog = new AuditLog(new InMemoryAuditStore());
         SessionPermissionService permissionService =
-                new SessionPermissionService(snapshotStore, new PermissionContextFactory(identityStore));
+                new SessionPermissionService(
+                        snapshotStore, new InMemoryMetadataStore(),
+                        new PermissionContextFactory(identityStore));
         DataRecordController controller = new DataRecordController(
                 new DataQueryService(snapshotStore, dataAccess, new PostgresDialect(), auditLog),
                 new DataWriteService(snapshotStore, dataAccess, new PostgresDialect(), auditLog),

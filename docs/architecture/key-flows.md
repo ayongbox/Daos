@@ -136,7 +136,7 @@ Daos 以 BOM + starter 的方式消费 Baseon，并在 Web 契约上与其保持
 2. **应用维度权限**：Baseon `PermissionChecker` 增加两参默认方法 `hasPermission(appId, permission)`，既有实现无需改动；`@RequiresPermission` 增加 `appId` 属性（支持 `#参数` SpEL）。
 3. **解析时序**：权限上下文不再要求控制器先解析。`DaosPermissionChecker` 在切面/接口调用时从会话按应用惰性解析，并缓存到 `PermissionContextHolder`（按 `appId` 隔离）；数据接口以 `table:read` / `table:create` / `table:update` / `table:delete` 调用同一 checker 完成动作级裁决。
 
-刻意不做的接线：Daos 使用自建会话登录，不引入 `baseon-starter-auth` 的 JWT 过滤器，因此不用 `@RequiresPermission` 注解，而是以编程方式调用其 `PermissionChecker` 契约；注解路径留给使用 starter-auth 的应用，两参方法与切面逻辑已被 Baseon 单测覆盖。
+刻意不做的接线：Daos 使用自建会话登录，不引入 `baseon-starter-auth` 的 JWT 过滤器，因此不用 `@RequiresPermission` 注解，而是以编程方式调用其 `PermissionChecker` 契约；注解路径留给使用 starter-auth 的应用，两参方法与切面逻辑已被 Baseon 单测覆盖。`daos-runtime` 也不声明该 starter 依赖：其自动装配在缺少 `baseon.auth.secret` 时直接拒绝启动，与自建会话重复。
 
 ## 六、附件与文件存储
 
@@ -144,17 +144,17 @@ Daos 以 BOM + starter 的方式消费 Baseon，并在 Web 契约上与其保持
 
 | 步 | 动作 | 位置 | 失败处理 |
 |---|---|---|---|
-| 1 | 校验 `file:create`，按声明大小与类型快速拒绝 | web | 返回 400，不落盘 |
+| 1 | 校验 `file:upload`，按声明大小与类型快速拒绝 | web | 返回 400，不落盘 |
 | 2 | 流式读取到临时文件，同时统计真实大小并计算 SHA-256 | runtime/file | 超限即中止并删除临时文件 |
 | 3 | 按 `租户/应用/年/月/ULID` 生成存储键，写入对象存储 | runtime/file | 异常向上抛出，不写元数据 |
 | 4 | 保存文件元数据（归属、大小、哈希、上传人） | runtime/file | 元数据即真相，字节缺失按不存在处理 |
-| 5 | 会话下载校验 `file:read` 与租户/应用归属 | web | 跨归属一律 400，不泄露存在性 |
+| 5 | 会话下载校验 `file:download` 与租户/应用归属 | web | 跨归属一律 400，不泄露存在性 |
 | 6 | 签名下载校验 HMAC、有效期与绑定关系 | web | 篡改或过期返回 400 |
 
 接口：
 
-- `POST /api/apps/{appId}/files`（multipart，`file:create`）
-- `GET /api/apps/{appId}/files/{fileId}`、`POST .../signed-url`、`GET .../content`（`file:read`）
+- `POST /api/apps/{appId}/files`（multipart，`file:upload`）
+- `GET /api/apps/{appId}/files/{fileId}`、`POST .../signed-url`、`GET .../content`（`file:download`）
 - `DELETE /api/apps/{appId}/files/{fileId}`（`file:delete`）
 - `GET /api/files/download?token=...`（公开路径，只认签名令牌）
 
@@ -164,3 +164,21 @@ Daos 以 BOM + starter 的方式消费 Baseon，并在 Web 契约上与其保持
 - 默认本地存储（`daos.file.storage=local`），对象存储通过 Baseon `ObjectStorageService` 切换：设置 `storage=minio` 并引入 `baseon-starter-oss-minio`；
 - 默认单文件上限 20 MB、允许类型清单可配置；签名链接默认 5 分钟有效；
 - 未配置 `daos.file.download-secret` 时进程内生成临时密钥，重启后旧链接失效，多实例必须显式配置。
+
+## 七、建模器与设计态权限
+
+| 步 | 动作 | 位置 | 说明 |
+|---|---|---|---|
+| 1 | 创建应用 | `AppService` | 同时创建 `owner` 应用角色与 `APP` 资源权限，并绑定创建人 |
+| 2 | 读取草稿 | `SessionPermissionService.resolve` | 有生效快照用快照权限；尚未发布时回退草稿权限 |
+| 3 | 编辑表/字段/索引/关联 | 控制台 `ModelerPage` | 只改草稿，前端不做物理结构变更 |
+| 4 | 保存草稿 | `PUT /api/apps/{appId}/schema/draft` | 要求 `app:design` |
+| 5 | 预览/发布 | `GET/POST .../schema/migrations` | 预览要求 `app:design`，执行要求 `app:publish`，统一走 F02-03 结构演进 |
+
+设计器数据源：
+
+- 应用列表：`GET /api/apps`，摘要含表数量与状态；
+- 逻辑类型与默认配置：`GET /api/meta/field-types`，默认配置由 `FieldConfigTemplates` 唯一维护，前端不再重复实现；
+- 草稿读取：`GET /api/apps/{appId}/schema/draft`。
+
+边界：草稿权限只在「没有生效快照」时生效；应用一旦发布，权限变更必须重新发布。应用列表目前是平台级视图，租户档位（`DatabasePlacement`）接入后再按租户过滤。

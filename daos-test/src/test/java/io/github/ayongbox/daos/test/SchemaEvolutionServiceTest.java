@@ -20,7 +20,7 @@ import io.github.ayongbox.daos.core.migration.MigrationRecord;
 import io.github.ayongbox.daos.core.migration.MigrationStatus;
 import io.github.ayongbox.daos.runtime.engine.SchemaEvolutionService;
 import io.github.ayongbox.daos.runtime.engine.ddl.DefaultMigrationCompiler;
-import io.github.ayongbox.daos.runtime.engine.dialect.PostgresDialect;
+import io.github.ayongbox.daos.runtime.engine.dialect.H2Dialect;
 import io.github.ayongbox.daos.runtime.exec.DataAccessFacade;
 import io.github.ayongbox.daos.runtime.store.InMemoryMetadataStore;
 import io.github.ayongbox.daos.runtime.store.InMemoryMigrationStore;
@@ -65,7 +65,7 @@ class SchemaEvolutionServiceTest {
         migrationStore = new InMemoryMigrationStore();
         service = new SchemaEvolutionService(
                 metadataStore, snapshotStore, migrationStore,
-                new DefaultMigrationCompiler(), dataAccess, new PostgresDialect());
+                new DefaultMigrationCompiler(), dataAccess, new H2Dialect());
     }
 
     @Test
@@ -87,6 +87,16 @@ class SchemaEvolutionServiceTest {
                 () -> service.rollback(APP_ID, record.id(), "tester"));
         assertEquals(MigrationStatus.APPLIED, migrationStore.findById(record.id())
                 .orElseThrow().status());
+    }
+
+    @Test
+    void attachmentColumnCanBePublishedOnH2() {
+        metadataStore.saveDraft(app(1, List.of(titleField(), attachmentField())));
+
+        MigrationRecord record = service.apply(APP_ID, "tester");
+
+        assertEquals(MigrationStatus.APPLIED, record.status());
+        assertTrue(columnExists("files"));
     }
 
     @Test
@@ -180,6 +190,17 @@ class SchemaEvolutionServiceTest {
 
     private static SchemaField ownerField() {
         return field("f-3", "owner");
+    }
+
+    private static SchemaField attachmentField() {
+        return new SchemaField(
+                "f-4", APP_ID, "t1", "files", "附件", null,
+                FieldLogicalType.ATTACHMENT,
+                new FieldConfig.AttachmentConfig(5, 10, List.of(), "local", false, false, false, true),
+                FieldConstraints.defaults(),
+                FieldUiHint.empty(),
+                MetadataStatus.PUBLISHED, false, false, 0, null, Map.of(),
+                "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
     }
 
     private static SchemaField field(String id, String code) {

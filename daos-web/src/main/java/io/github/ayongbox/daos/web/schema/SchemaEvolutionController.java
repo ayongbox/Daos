@@ -23,13 +23,15 @@ import java.util.List;
 /**
  * 应用结构管理：保存草稿、预览迁移、执行发布、回滚与查看历史。
  *
- * <p>所有操作要求 {@code table:design} 权限；迁移执行与回滚以当前登录用户记录操作人。</p>
+ * <p>设计与回滚要求 {@code app:design} 权限，执行发布要求 {@code app:publish} 权限；
+ * 迁移执行与回滚以当前登录用户记录操作人。</p>
  */
 @RestController
 @RequestMapping("/api/apps/{appId}/schema")
 public class SchemaEvolutionController {
 
-    private static final String DESIGN_PERMISSION = "table:design";
+    private static final String DESIGN_PERMISSION = "app:design";
+    private static final String PUBLISH_PERMISSION = "app:publish";
 
     private final MetadataStore metadataStore;
     private final SchemaEvolutionService evolutionService;
@@ -42,6 +44,13 @@ public class SchemaEvolutionController {
         this.metadataStore = metadataStore;
         this.evolutionService = evolutionService;
         this.permissionChecker = permissionChecker;
+    }
+
+    @GetMapping("/draft")
+    public R<SchemaApp> draft(@PathVariable String appId) {
+        requireDesign(appId);
+        return R.ok(metadataStore.findDraft(appId)
+                .orElseThrow(() -> new IllegalArgumentException("应用草稿不存在: " + appId)));
     }
 
     @PutMapping("/draft")
@@ -68,7 +77,7 @@ public class SchemaEvolutionController {
 
     @PostMapping("/migrations")
     public R<MigrationRecord> apply(@PathVariable String appId) {
-        requireDesign(appId);
+        require(appId, PUBLISH_PERMISSION);
         return R.ok(evolutionService.apply(appId, operator()));
     }
 
@@ -80,8 +89,12 @@ public class SchemaEvolutionController {
     }
 
     private void requireDesign(String appId) {
-        if (!permissionChecker.hasPermission(appId, DESIGN_PERMISSION)) {
-            throw new AccessDeniedException("无权限执行 " + DESIGN_PERMISSION);
+        require(appId, DESIGN_PERMISSION);
+    }
+
+    private void require(String appId, String permission) {
+        if (!permissionChecker.hasPermission(appId, permission)) {
+            throw new AccessDeniedException("无权限执行 " + permission);
         }
     }
 

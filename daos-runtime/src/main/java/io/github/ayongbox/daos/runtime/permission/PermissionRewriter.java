@@ -179,9 +179,7 @@ public final class PermissionRewriter {
             if (!rule.enabled() || rule.deleted() || !PermissionRuleMatcher.active(rule, now)) {
                 continue;
             }
-            if (rule.resource().type() != ResourceType.TABLE
-                    || !schema.appCode().equals(rule.resource().appCode())
-                    || !table.tableCode().equals(rule.resource().objectCode())
+            if (!matchesTable(rule, schema.appCode(), table.tableCode())
                     || !rule.actions().contains(action)) {
                 continue;
             }
@@ -213,6 +211,18 @@ public final class PermissionRewriter {
     private boolean isUnconditional(SchemaPermission rule) {
         return rule.condition() == null
                 && (rule.dataScope() == null || rule.dataScope().type() == DataScopeType.ALL);
+    }
+
+    /**
+     * 表资源匹配：{@code objectCode} 为空表示应用内全部表，和应用维度的权限裁决保持一致。
+     */
+    private static boolean matchesTable(SchemaPermission rule, String appCode, String tableCode) {
+        if (rule.resource().type() != ResourceType.TABLE
+                || !appCode.equals(rule.resource().appCode())) {
+            return false;
+        }
+        String objectCode = rule.resource().objectCode();
+        return objectCode == null || objectCode.isBlank() || tableCode.equals(objectCode);
     }
 
     private FilterNode tenantPredicate(IrTable table, PermissionContext permissions) {

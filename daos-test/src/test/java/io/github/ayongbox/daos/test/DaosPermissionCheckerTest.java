@@ -11,6 +11,7 @@ import io.github.ayongbox.daos.core.metadata.permission.SchemaPermission;
 import io.github.ayongbox.daos.runtime.identity.InMemoryIdentityStore;
 import io.github.ayongbox.daos.runtime.identity.PermissionContextFactory;
 import io.github.ayongbox.daos.runtime.identity.SessionPermissionService;
+import io.github.ayongbox.daos.runtime.store.InMemoryMetadataStore;
 import io.github.ayongbox.daos.runtime.store.InMemorySnapshotStore;
 import io.github.ayongbox.daos.web.auth.DaosPermissionChecker;
 import io.github.ayongbox.daos.web.auth.PermissionContextHolder;
@@ -35,6 +36,7 @@ class DaosPermissionCheckerTest {
     private final DaosPermissionChecker checker = new DaosPermissionChecker(
             new SessionPermissionService(
                     new InMemorySnapshotStore(),
+                    new InMemoryMetadataStore(),
                     new PermissionContextFactory(new InMemoryIdentityStore(null, null, null, null))));
 
     @BeforeEach

@@ -3,7 +3,9 @@ package io.github.ayongbox.daos.runtime.store;
 import io.github.ayongbox.daos.core.metadata.app.SchemaApp;
 import io.github.ayongbox.daos.core.spi.MetadataStore;
 
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -16,7 +18,15 @@ public final class InMemoryMetadataStore implements MetadataStore {
 
     @Override
     public synchronized Optional<SchemaApp> findDraft(String appId) {
-        return Optional.ofNullable(drafts.get(appId));
+        return Optional.ofNullable(drafts.get(appId)).filter(app -> !app.deleted());
+    }
+
+    @Override
+    public synchronized List<SchemaApp> findAllDrafts() {
+        return drafts.values().stream()
+                .filter(app -> !app.deleted())
+                .sorted(Comparator.comparing(SchemaApp::code))
+                .toList();
     }
 
     @Override
