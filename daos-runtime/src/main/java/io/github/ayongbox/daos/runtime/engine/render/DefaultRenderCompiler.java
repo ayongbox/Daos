@@ -7,7 +7,9 @@ import io.github.ayongbox.daos.core.ir.NormalizedSchema;
 import io.github.ayongbox.daos.core.ir.RenderTree;
 import io.github.ayongbox.daos.core.ir.RenderTree.RenderNode;
 import io.github.ayongbox.daos.core.metadata.common.FormScene;
+import io.github.ayongbox.daos.core.metadata.form.FormComponent;
 import io.github.ayongbox.daos.core.metadata.form.FormField;
+import io.github.ayongbox.daos.core.metadata.field.FieldConfig;
 import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
 import io.github.ayongbox.daos.core.metadata.permission.MaskRule;
 import io.github.ayongbox.daos.core.pipeline.render.RenderCompiler;
@@ -81,8 +83,9 @@ public final class DefaultRenderCompiler implements RenderCompiler {
                 || Boolean.TRUE.equals(field.requiredOverride())
                 || (column != null && column.source().constraints().required()));
 
+        boolean subform = field.component() == FormComponent.SUBFORM;
         List<RenderNode> children;
-        if (!field.subformFields().isEmpty()) {
+        if (subform) {
             IrTable subformTable = schema.requireTable(field.subformTableId());
             children = renderFields(schema, subformTable, field.subformFields(), mask);
         } else {
@@ -91,6 +94,21 @@ public final class DefaultRenderCompiler implements RenderCompiler {
 
         if (field.component().container() && children.isEmpty()) {
             return null;
+        }
+
+        Map<String, Object> props = propsOf(field, fieldId, mask, column);
+        if (subform) {
+            IrTable subformTable = schema.requireTable(field.subformTableId());
+            props.put("subform", true);
+            props.put("tableCode", subformTable.tableCode());
+            props.put("minRows", field.minRows());
+            props.put("maxRows", field.maxRows());
+            props.put("allowAdd", field.allowAdd());
+            props.put("allowDelete", field.allowDelete());
+            props.put("allowSort", field.allowSort());
+            props.put("showRowNumber", field.showRowNumber());
+            props.put("showSummary", field.showSummary());
+            props.put("summaryFields", field.summaryFields());
         }
 
         String label = labelOf(field, column);
@@ -103,7 +121,7 @@ public final class DefaultRenderCompiler implements RenderCompiler {
                 readonly,
                 required,
                 false,
-                propsOf(field, fieldId, mask),
+                props,
                 children);
     }
 
@@ -114,13 +132,20 @@ public final class DefaultRenderCompiler implements RenderCompiler {
         return column == null ? null : column.source().displayName();
     }
 
-    private Map<String, Object> propsOf(FormField field, String fieldId, FieldMask mask) {
+    private Map<String, Object> propsOf(
+            FormField field, String fieldId, FieldMask mask, IrColumn column) {
         Map<String, Object> props = new LinkedHashMap<>(field.props());
         putIfPresent(props, "placeholder", field.placeholder());
         putIfPresent(props, "helpText", field.helpText());
         putIfPresent(props, "tooltip", field.tooltip());
         if (field.defaultValue() != null) {
             props.put("defaultValue", field.defaultValue());
+        }
+        if (column != null
+                && column.source().config() instanceof FieldConfig.RelationConfig relation) {
+            props.put("relation", true);
+            props.put("multiple", relation.multiple());
+            props.put("maxSelected", relation.maxSelected());
         }
         if (fieldId != null) {
             maskRuleOf(mask, fieldId).ifPresent(rule -> putMaskRule(props, rule));

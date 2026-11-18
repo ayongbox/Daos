@@ -254,7 +254,8 @@ function ViewRuntime({ appId, viewCode }: { appId: string; viewCode: string }) {
         key: column.fieldCode,
         width: column.width ?? undefined,
         ellipsis: true,
-        render: (value: unknown) => displayValue(value)
+        render: (value: unknown, record: Record<string, unknown>) =>
+          displayValue(record[`${column.fieldCode}_display`] ?? value)
       }));
     }
     const sample = page?.records[0];
@@ -264,7 +265,8 @@ function ViewRuntime({ appId, viewCode }: { appId: string; viewCode: string }) {
       dataIndex: key,
       key,
       ellipsis: true,
-      render: (value: unknown) => displayValue(value)
+      render: (value: unknown, record: Record<string, unknown>) =>
+        displayValue(record[`${key}_display`] ?? value)
     }));
   }, [detail, page, aggregated]);
 

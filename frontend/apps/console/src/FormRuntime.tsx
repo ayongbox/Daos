@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Alert,
@@ -11,9 +11,11 @@ import {
   Form,
   Input,
   InputNumber,
+  Popconfirm,
   Rate,
   Select,
   Space,
+  Spin,
   Switch,
   Table,
   Tag,
@@ -23,7 +25,15 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { tokens } from '@daos/ui';
 import { ApiError } from '@daos/sdk';
-import { api, type FormRenderResult, type FormSummary, type RecordPage, type RenderNode } from './api';
+import {
+  api,
+  type FormRecordDetail,
+  type FormRenderResult,
+  type FormSummary,
+  type RecordPage,
+  type RelationOption,
+  type RenderNode
+} from './api';
 
 const READONLY_COMPONENTS = new Set([
   'formula',
@@ -40,11 +50,18 @@ function isReadonly(node: RenderNode): boolean {
   return node.readonly || READONLY_COMPONENTS.has(node.component);
 }
 
-function fieldNodes(nodes: RenderNode[]): RenderNode[] {
+function mainFieldNodes(nodes: RenderNode[]): RenderNode[] {
   return nodes.flatMap((node) => {
+    if (node.component === 'subform') return [];
     const own = node.fieldCode ? [node] : [];
-    return [...own, ...fieldNodes(node.children)];
+    return [...own, ...mainFieldNodes(node.children)];
   });
+}
+
+function subformNodes(nodes: RenderNode[]): RenderNode[] {
+  return nodes.flatMap((node) =>
+    node.component === 'subform' ? [node] : subformNodes(node.children)
+  );
 }
 
 function normalizeValue(component: string, value: unknown): unknown {
@@ -72,7 +89,65 @@ function optionsOf(node: RenderNode): Array<{ label: string; value: string }> {
   );
 }
 
-function control(node: RenderNode) {
+function RelationSelect({
+  appId,
+  tableCode,
+  node,
+  value,
+  onChange
+}: {
+  appId: string;
+  tableCode: string;
+  node: RenderNode;
+  value?: unknown;
+  onChange?: (value: unknown) => void;
+}) {
+  const [options, setOptions] = useState<RelationOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fieldCode = node.fieldCode ?? '';
+  const multiple = node.props.multiple === true;
+  const placeholder =
+    typeof node.props.placeholder === 'string' ? node.props.placeholder : '搜索并选择关联记录';
+
+  function load(keyword = '') {
+    if (!fieldCode) return;
+    setLoading(true);
+    api
+      .relationOptions(appId, tableCode, fieldCode, keyword)
+      .then(setOptions)
+      .catch(() => setOptions([]))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    load();
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [appId, tableCode, fieldCode]);
+
+  return (
+    <Select
+      mode={multiple ? 'multiple' : undefined}
+      allowClear
+      showSearch
+      filterOption={false}
+      loading={loading}
+      disabled={isReadonly(node)}
+      placeholder={placeholder}
+      options={options}
+      value={value as string | string[] | undefined}
+      onChange={(next) => onChange?.(next)}
+      onSearch={(text) => {
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => load(text), 300);
+      }}
+    />
+  );
+}
+
+function control(node: RenderNode, appId: string, tableCode: string) {
   const disabled = isReadonly(node);
   const placeholder = typeof node.props.placeholder === 'string' ? node.props.placeholder : undefined;
   const options = optionsOf(node);
@@ -114,12 +189,172 @@ function control(node: RenderNode) {
       return <TimePicker style={{ width: '100%' }} disabled={disabled} />;
     case 'rating':
       return <Rate disabled={disabled} />;
+    case 'relation':
+      return <RelationSelect appId={appId} tableCode={tableCode} node={node} />;
     default:
       return <Input disabled={disabled} placeholder={placeholder} />;
   }
 }
 
-function renderNode(node: RenderNode): ReactNode {
+function SubformEditor({ node, appId }: { node: RenderNode; appId: string }) {
+  const childTableCode =
+    typeof node.props.tableCode === 'string' ? node.props.tableCode : '';
+  const allowAdd = node.props.allowAdd !== false;
+  const allowDelete = node.props.allowDelete !== false;
+  const minRows = typeof node.props.minRows === 'number' ? node.props.minRows : 0;
+  const maxRows = typeof node.props.maxRows === 'number' ? node.props.maxRows : 200;
+  const showRowNumber = node.props.showRowNumber !== false;
+  const columns = node.children.filter((child) => child.fieldCode);
+
+  return (
+    <Form.List name={['__subforms', node.id]}>
+      {(rows, { add, remove }) => {
+        const tableColumns: ColumnsType<{ key: number; name: number }> = [
+          ...(showRowNumber
+            ? [
+                {
+                  title: '#',
+                  key: '__index',
+                  width: 48,
+                  render: (_: unknown, __: { key: number }, index: number) => index + 1
+                }
+              ]
+            : []),
+          ...columns.map((child) => ({
+            title: child.label ?? child.fieldCode,
+            key: child.id,
+            render: (_: unknown, row: { key: number; name: number }) => (
+              <Form.Item name={[row.name, child.fieldCode as string]} noStyle>
+                {control(child, appId, childTableCode)}
+              </Form.Item>
+            )
+          })),
+          ...(allowDelete
+            ? [
+                {
+                  title: '',
+                  key: '__actions',
+                  width: 64,
+                  render: (_: unknown, row: { key: number; name: number }) => (
+                    <Button type="link" danger size="small" onClick={() => remove(row.name)}>
+                      删除
+                    </Button>
+                  )
+                }
+              ]
+            : [])
+        ];
+
+        return (
+          <div style={{ width: '100%', paddingInline: 8, marginBottom: 16 }}>
+            <Table
+              rowKey="key"
+              size="small"
+              pagination={false}
+              scroll={{ x: 600 }}
+              dataSource={rows}
+              columns={tableColumns}
+              locale={{ emptyText: '暂无明细' }}
+            />
+            <Space style={{ marginTop: 8 }}>
+              {allowAdd ? (
+                <Button size="small" onClick={() => add()} disabled={rows.length >= maxRows}>
+                  新增行
+                </Button>
+              ) : null}
+              {minRows > 0 ? (
+                <Typography.Text type="secondary">至少 {minRows} 行</Typography.Text>
+              ) : null}
+              {rows.length >= maxRows ? (
+                <Typography.Text type="secondary">最多 {maxRows} 行</Typography.Text>
+              ) : null}
+            </Space>
+          </div>
+        );
+      }}
+    </Form.List>
+  );
+}
+
+function RecordDetail({
+  appId,
+  formCode,
+  recordId,
+  nodes
+}: {
+  appId: string;
+  formCode: string;
+  recordId: string;
+  nodes: RenderNode[];
+}) {
+  const [detail, setDetail] = useState<FormRecordDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api
+      .formRecord(appId, formCode, recordId)
+      .then((value) => {
+        if (!cancelled) setDetail(value);
+      })
+      .catch(() => {
+        if (!cancelled) setDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appId, formCode, recordId]);
+
+  if (loading) return <Spin size="small" />;
+  if (!detail) return <Typography.Text type="secondary">明细加载失败</Typography.Text>;
+
+  const blocks = nodes
+    .map((node) => ({ node, rows: detail.subforms[node.id] ?? [] }))
+    .filter((block) => block.rows.length > 0);
+  if (blocks.length === 0) return <Typography.Text type="secondary">没有明细数据</Typography.Text>;
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={12}>
+      {blocks.map(({ node, rows }) => {
+        const columns: ColumnsType<Record<string, unknown>> = node.children
+          .filter((child) => child.fieldCode)
+          .map((child) => {
+            const code = child.fieldCode as string;
+            return {
+              title: child.label ?? code,
+              dataIndex: code,
+              key: code,
+              render: (value: unknown, record: Record<string, unknown>) => {
+                const display = record[`${code}_display`];
+                if (display !== null && display !== undefined) return String(display);
+                if (value === null || value === undefined) return '-';
+                return Array.isArray(value) ? value.join('、') : String(value);
+              }
+            };
+          });
+        return (
+          <div key={node.id}>
+            <Typography.Text strong>{node.label ?? '明细'}</Typography.Text>
+            <Table
+              rowKey="id"
+              size="small"
+              pagination={false}
+              scroll={{ x: 600 }}
+              columns={columns}
+              dataSource={rows}
+            />
+          </div>
+        );
+      })}
+    </Space>
+  );
+}
+
+function renderNode(node: RenderNode, appId: string, tableCode: string): ReactNode {
   if (node.component === 'divider') {
     return <Divider key={node.id} style={{ margin: '8px 0' }} />;
   }
@@ -135,6 +370,16 @@ function renderNode(node: RenderNode): ReactNode {
       <Alert key={node.id} type="info" showIcon message={String(node.props.text ?? node.label ?? '')} />
     );
   }
+  if (node.component === 'subform') {
+    return (
+      <div key={node.id} style={{ width: '100%' }}>
+        <Typography.Text type="secondary" style={{ fontSize: 12, paddingInline: 8 }}>
+          {node.label ?? '明细表'}
+        </Typography.Text>
+        <SubformEditor node={node} appId={appId} />
+      </div>
+    );
+  }
   if (node.children.length > 0) {
     return (
       <div key={node.id} style={{ width: '100%' }}>
@@ -143,7 +388,9 @@ function renderNode(node: RenderNode): ReactNode {
             {node.label}
           </Typography.Text>
         ) : null}
-        <div style={{ display: 'flex', flexWrap: 'wrap' }}>{node.children.map(renderNode)}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+          {node.children.map((child) => renderNode(child, appId, tableCode))}
+        </div>
       </div>
     );
   }
@@ -159,7 +406,7 @@ function renderNode(node: RenderNode): ReactNode {
         required={node.required}
         style={{ marginBottom: 16 }}
       >
-        {control(node)}
+        {control(node, appId, tableCode)}
       </Form.Item>
     </div>
   );
@@ -237,7 +484,8 @@ export function FormRuntime({
     message.error(cause instanceof Error ? cause.message : '请求失败');
   }
 
-  const leaves = useMemo(() => (result ? fieldNodes(result.tree.nodes) : []), [result]);
+  const leaves = useMemo(() => (result ? mainFieldNodes(result.tree.nodes) : []), [result]);
+  const subLeaves = useMemo(() => (result ? subformNodes(result.tree.nodes) : []), [result]);
 
   async function refreshRecords() {
     if (!result) return;
@@ -256,10 +504,35 @@ export function FormRuntime({
       for (const node of leaves) {
         if (!node.fieldCode || isReadonly(node)) continue;
         if (!(node.fieldCode in values)) continue;
-        payload[node.fieldCode] = normalizeValue(node.component, values[node.fieldCode]);
+        const normalized = normalizeValue(node.component, values[node.fieldCode]);
+        payload[node.fieldCode] =
+          node.component === 'relation' && Array.isArray(normalized)
+            ? JSON.stringify(normalized)
+            : normalized;
+      }
+      const rawSubforms =
+        (values.__subforms as Record<string, Record<string, unknown>[]> | undefined) ?? {};
+      const subforms: Record<string, Record<string, unknown>[]> = {};
+      for (const node of subLeaves) {
+        const rows = rawSubforms[node.id] ?? [];
+        subforms[node.id] = rows.map((row) => {
+          const item: Record<string, unknown> = {};
+          for (const child of node.children) {
+            if (!child.fieldCode || isReadonly(child)) continue;
+            if (!(child.fieldCode in row)) continue;
+            const normalized = normalizeValue(child.component, row[child.fieldCode]);
+            item[child.fieldCode] =
+              child.component === 'relation' && Array.isArray(normalized)
+                ? JSON.stringify(normalized)
+                : normalized;
+          }
+          if (row.id !== null && row.id !== undefined) item.id = row.id;
+          if (row.version !== null && row.version !== undefined) item.version = row.version;
+          return item;
+        });
       }
       setSubmitting(true);
-      await api.createRecord(appId, result.tableCode, payload);
+      await api.createFormRecord(appId, result.formCode, { values: payload, subforms });
       runtimeForm.resetFields();
       message.success('已提交');
       await refreshRecords();
@@ -275,18 +548,57 @@ export function FormRuntime({
   const columns: ColumnsType<Record<string, unknown>> = useMemo(() => {
     const fieldColumns = leaves
       .filter((node) => node.fieldCode)
-      .map((node) => ({
-        title: node.label ?? node.fieldCode ?? '',
-        dataIndex: node.fieldCode as string,
-        key: node.fieldCode as string,
-        ellipsis: true,
-        render: (value: unknown) => (value === null || value === undefined ? '-' : String(value))
-      }));
+      .map((node) => {
+        const code = node.fieldCode as string;
+        return {
+          title: node.label ?? code,
+          dataIndex: code,
+          key: code,
+          ellipsis: true,
+          render: (value: unknown, record: Record<string, unknown>) => {
+            const display = record[`${code}_display`];
+            if (display !== null && display !== undefined) return String(display);
+            if (value === null || value === undefined) return '-';
+            return Array.isArray(value) ? value.join('、') : String(value);
+          }
+        };
+      });
     return [
       ...fieldColumns,
-      { title: 'ID', dataIndex: 'id', key: 'id', width: 180, ellipsis: true }
+      { title: 'ID', dataIndex: 'id', key: 'id', width: 180, ellipsis: true },
+      {
+        title: '操作',
+        key: '__actions',
+        width: 80,
+        render: (_: unknown, record: Record<string, unknown>) => (
+          <Popconfirm
+            title="删除记录？子表明细会一并删除"
+            onConfirm={() => removeRecord(record)}
+          >
+            <Button type="link" danger size="small">
+              删除
+            </Button>
+          </Popconfirm>
+        )
+      }
     ];
   }, [leaves]);
+
+  async function removeRecord(record: Record<string, unknown>) {
+    if (!result) return;
+    try {
+      await api.deleteFormRecord(
+        appId,
+        result.formCode,
+        String(record.id),
+        Number(record.version ?? 0)
+      );
+      message.success('已删除');
+      await refreshRecords();
+    } catch (cause) {
+      showError(cause);
+    }
+  }
 
   if (forms === null) {
     return <Card loading />;
@@ -334,7 +646,9 @@ export function FormRuntime({
       <Card size="small" title={result?.displayName ?? '表单'} loading={loading && !result}>
         {result ? (
           <Form form={runtimeForm} layout="vertical" requiredMark>
-            <div style={{ display: 'flex', flexWrap: 'wrap' }}>{result.tree.nodes.map(renderNode)}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+              {result.tree.nodes.map((node) => renderNode(node, appId, result.tableCode))}
+            </div>
             <Divider style={{ margin: '4px 0 16px' }} />
             <Space>
               <Button type="primary" onClick={submit} loading={submitting}>
@@ -366,6 +680,20 @@ export function FormRuntime({
           columns={columns}
           dataSource={records?.records ?? []}
           locale={{ emptyText: '还没有记录' }}
+          expandable={
+            subLeaves.length > 0 && result
+              ? {
+                  expandedRowRender: (record: Record<string, unknown>) => (
+                    <RecordDetail
+                      appId={appId}
+                      formCode={result.formCode}
+                      recordId={String(record.id)}
+                      nodes={subLeaves}
+                    />
+                  )
+                }
+              : undefined
+          }
         />
       </Card>
     </Space>

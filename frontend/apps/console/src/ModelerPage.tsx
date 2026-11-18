@@ -1023,6 +1023,10 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                     setDraft((previous) => (previous ? { ...previous, forms } : previous));
                     setDirty(true);
                   }}
+                  onTablesChange={(tables) => {
+                    setDraft((previous) => (previous ? { ...previous, tables } : previous));
+                    setDirty(true);
+                  }}
                 />
               ) : capability === 'run' ? (
                 <FormRuntime appId={appId} />

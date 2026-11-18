@@ -5,8 +5,8 @@ import io.github.ayongbox.baseon.core.model.R;
 import io.github.ayongbox.daos.runtime.auth.AuthenticationException;
 import io.github.ayongbox.daos.runtime.exec.WriteConflictException;
 import io.github.ayongbox.daos.runtime.identity.AccessDeniedException;
+import io.github.ayongbox.daos.runtime.app.AppNotPublishedException;
 import io.github.ayongbox.daos.runtime.permission.PermissionRewriteException;
-import io.github.ayongbox.daos.runtime.view.AppNotPublishedException;
 
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;

@@ -41,7 +41,9 @@ import io.github.ayongbox.daos.runtime.exec.DataWriteService;
 import io.github.ayongbox.daos.runtime.identity.InMemoryIdentityStore;
 import io.github.ayongbox.daos.runtime.identity.PermissionContextFactory;
 import io.github.ayongbox.daos.runtime.identity.SessionPermissionService;
+import io.github.ayongbox.daos.runtime.relation.RelationService;
 import io.github.ayongbox.daos.runtime.store.InMemoryMetadataStore;
+import io.github.ayongbox.daos.runtime.subform.SubformService;
 import io.github.ayongbox.daos.runtime.store.InMemorySnapshotStore;
 import io.github.ayongbox.daos.web.auth.DaosPermissionChecker;
 import io.github.ayongbox.daos.web.auth.SessionAuthInterceptor;
@@ -118,9 +120,17 @@ class DataRecordApiTest {
                 new SessionPermissionService(
                         snapshotStore, new InMemoryMetadataStore(),
                         new PermissionContextFactory(identityStore));
+        DataQueryService queryService =
+                new DataQueryService(snapshotStore, dataAccess, new PostgresDialect(), auditLog);
+        DataWriteService writeService =
+                new DataWriteService(snapshotStore, dataAccess, new PostgresDialect(), auditLog);
+        RelationService relationService = new RelationService(snapshotStore, queryService);
         DataRecordController controller = new DataRecordController(
-                new DataQueryService(snapshotStore, dataAccess, new PostgresDialect(), auditLog),
-                new DataWriteService(snapshotStore, dataAccess, new PostgresDialect(), auditLog),
+                queryService,
+                writeService,
+                relationService,
+                new SubformService(
+                        snapshotStore, dataAccess, queryService, writeService, relationService),
                 permissionService,
                 new DaosPermissionChecker(permissionService),
                 snapshotStore);

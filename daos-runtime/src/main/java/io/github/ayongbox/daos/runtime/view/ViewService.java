@@ -13,6 +13,7 @@ import io.github.ayongbox.daos.core.metadata.view.ViewFilter;
 import io.github.ayongbox.daos.core.metadata.view.ViewSort;
 import io.github.ayongbox.daos.core.snapshot.SchemaSnapshot;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
+import io.github.ayongbox.daos.runtime.app.AppNotPublishedException;
 import io.github.ayongbox.daos.runtime.exec.DataQueryService;
 
 import java.util.ArrayList;

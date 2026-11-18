@@ -11,11 +11,14 @@ import io.github.ayongbox.daos.core.metadata.field.SchemaField;
 import io.github.ayongbox.daos.core.metadata.table.SchemaTable;
 import io.github.ayongbox.daos.core.snapshot.SchemaSnapshot;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
+import io.github.ayongbox.daos.runtime.app.AppNotPublishedException;
 import io.github.ayongbox.daos.runtime.auth.AuthenticationException;
 import io.github.ayongbox.daos.runtime.exec.DataQueryService;
 import io.github.ayongbox.daos.runtime.exec.DataWriteService;
 import io.github.ayongbox.daos.runtime.identity.AccessDeniedException;
 import io.github.ayongbox.daos.runtime.identity.SessionPermissionService;
+import io.github.ayongbox.daos.runtime.relation.RelationService;
+import io.github.ayongbox.daos.runtime.subform.SubformService;
 import io.github.ayongbox.daos.web.auth.PermissionContextHolder;
 import io.github.ayongbox.daos.web.auth.SessionAuthInterceptor;
 
@@ -44,6 +47,8 @@ public class DataRecordController {
 
     private final DataQueryService queryService;
     private final DataWriteService writeService;
+    private final RelationService relationService;
+    private final SubformService subformService;
     private final SessionPermissionService permissionService;
     private final PermissionChecker permissionChecker;
     private final SnapshotStore snapshotStore;
@@ -51,14 +56,31 @@ public class DataRecordController {
     public DataRecordController(
             DataQueryService queryService,
             DataWriteService writeService,
+            RelationService relationService,
+            SubformService subformService,
             SessionPermissionService permissionService,
             PermissionChecker permissionChecker,
             SnapshotStore snapshotStore) {
         this.queryService = queryService;
         this.writeService = writeService;
+        this.relationService = relationService;
+        this.subformService = subformService;
         this.permissionService = permissionService;
         this.permissionChecker = permissionChecker;
         this.snapshotStore = snapshotStore;
+    }
+
+    @GetMapping("/relation-options")
+    public R<List<RelationService.RelationOption>> relationOptions(
+            @PathVariable String appId,
+            @PathVariable String tableCode,
+            @RequestParam String field,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "20") int limit,
+            HttpServletRequest servletRequest) {
+        requirePermission(appId, "read");
+        return R.ok(relationService.options(
+                appId, tableCode, field, keyword, limit, context(servletRequest, appId)));
     }
 
     @GetMapping
@@ -91,7 +113,9 @@ public class DataRecordController {
             HttpServletRequest servletRequest) {
         SchemaTable table = requireTable(appId, tableCode);
         requirePermission(appId, "create");
-        String id = writeService.insert(appId, table.id(), values, context(servletRequest, appId));
+        PermissionContext context = context(servletRequest, appId);
+        relationService.validate(appId, table, values, context);
+        String id = writeService.insert(appId, table.id(), values, context);
         return R.ok(Map.of("id", id));
     }
 
@@ -105,8 +129,10 @@ public class DataRecordController {
             HttpServletRequest servletRequest) {
         SchemaTable table = requireTable(appId, tableCode);
         requirePermission(appId, "update");
+        PermissionContext context = context(servletRequest, appId);
+        relationService.validate(appId, table, values, context);
         int affected = writeService.update(
-                appId, table.id(), recordId, version, values, context(servletRequest, appId));
+                appId, table.id(), recordId, version, values, context);
         return R.ok(Map.of("affected", affected));
     }
 
@@ -119,7 +145,7 @@ public class DataRecordController {
             HttpServletRequest servletRequest) {
         SchemaTable table = requireTable(appId, tableCode);
         requirePermission(appId, "delete");
-        int affected = writeService.delete(
+        int affected = subformService.deleteWithChildren(
                 appId, table.id(), recordId, version, context(servletRequest, appId));
         return R.ok(Map.of("affected", affected));
     }
@@ -149,7 +175,7 @@ public class DataRecordController {
 
     private SchemaTable requireTable(String appId, String tableCode) {
         SchemaSnapshot snapshot = snapshotStore.findActive(appId)
-                .orElseThrow(() -> new IllegalStateException("应用 " + appId + " 没有生效版本"));
+                .orElseThrow(() -> new AppNotPublishedException("应用 " + appId + " 没有生效版本"));
         return snapshot.app().tables().stream()
                 .filter(table -> !table.deleted())
                 .filter(table -> table.code().equals(tableCode))

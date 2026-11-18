@@ -2,13 +2,18 @@ package io.github.ayongbox.daos.runtime.exec;
 
 import io.github.ayongbox.daos.core.audit.AuditAction;
 import io.github.ayongbox.daos.core.audit.AuditOutcome;
+import io.github.ayongbox.daos.core.ir.FilterNode;
+import io.github.ayongbox.daos.core.ir.IrColumn;
 import io.github.ayongbox.daos.core.ir.IrTable;
 import io.github.ayongbox.daos.core.ir.NormalizedSchema;
 import io.github.ayongbox.daos.core.ir.PermissionContext;
 import io.github.ayongbox.daos.core.ir.QueryPlan;
 import io.github.ayongbox.daos.core.ir.QueryRequest;
 import io.github.ayongbox.daos.core.ir.SqlStatement;
+import io.github.ayongbox.daos.core.metadata.common.ConditionOperator;
+import io.github.ayongbox.daos.core.metadata.common.FieldLogicalType;
 import io.github.ayongbox.daos.core.metadata.common.ResourceType;
+import io.github.ayongbox.daos.core.metadata.field.FieldConfig;
 import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
 import io.github.ayongbox.daos.core.pipeline.dialect.SqlDialect;
 import io.github.ayongbox.daos.core.pipeline.query.QueryCompiler;
@@ -26,6 +31,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.StringJoiner;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -107,11 +114,19 @@ public final class DataQueryService {
     public List<Map<String, Object>> query(
             String appId, String tableId, QueryRequest request, PermissionContext permissions) {
         Rewritten rewritten = rewrite(appId, tableId, request, permissions);
+        List<Map<String, Object>> rows = queryRaw(appId, rewritten, permissions);
+        decorateRelations(appId, rewritten.schema(), rewritten.table(), rows, permissions);
+        return rows;
+    }
+
+    private List<Map<String, Object>> queryRaw(
+            String appId, Rewritten rewritten, PermissionContext permissions) {
         SqlStatement statement = dialect.query().render(withIdentity(rewritten.select()));
         List<Map<String, Object>> rows = fieldMasker.apply(
                 rewritten.table(), rewritten.mask(), dataAccess.query(statement));
         auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
-                AuditAction.READ, ResourceType.TABLE, tableId, AuditOutcome.SUCCESS, null,
+                AuditAction.READ, ResourceType.TABLE, rewritten.table().tableId(),
+                AuditOutcome.SUCCESS, null,
                 Map.of("tableCode", rewritten.table().tableCode(), "rowCount", rows.size()));
         return rows;
     }
@@ -151,7 +166,7 @@ public final class DataQueryService {
             QueryPlan.Select rewritten = permissionRewriter.rewrite(
                     schema, table, select, request, permissions, now);
             FieldMask mask = permissionRewriter.effectiveFieldMask(schema, table, permissions, now);
-            return new Rewritten(rewritten, table, mask);
+            return new Rewritten(select, rewritten, table, mask, schema);
         } catch (PermissionRewriteException error) {
             auditLog.record(permissions.tenantId(), appId, permissions.subjectId(),
                     AuditAction.READ, ResourceType.TABLE, tableId, AuditOutcome.DENIED,
@@ -160,7 +175,12 @@ public final class DataQueryService {
         }
     }
 
-    private record Rewritten(QueryPlan.Select select, IrTable table, FieldMask mask) {
+    private record Rewritten(
+            QueryPlan.Select requested,
+            QueryPlan.Select select,
+            IrTable table,
+            FieldMask mask,
+            NormalizedSchema schema) {
     }
 
     /**
@@ -178,6 +198,134 @@ public final class DataQueryService {
         return new QueryPlan.Select(
                 select.physicalTable(), items, select.filter(), select.orderBy(),
                 select.limit(), select.offset());
+    }
+
+    /**
+     * 为关联字段补充 {@code <fieldCode>_display} 展示值。按目标表批量解析，避免 N+1。
+     * 目标表不可读或无权限时保留原始 id，不影响主查询。
+     */
+    private void decorateRelations(
+            String appId,
+            NormalizedSchema schema,
+            IrTable table,
+            List<Map<String, Object>> rows,
+            PermissionContext permissions) {
+
+        if (rows.isEmpty()) {
+            return;
+        }
+        for (IrColumn column : table.columns()) {
+            if (column.source().logicalType() != FieldLogicalType.RELATION
+                    || !column.hasPhysicalColumn()
+                    || !(column.source().config() instanceof FieldConfig.RelationConfig config)) {
+                continue;
+            }
+            String fieldCode = column.fieldCode();
+            if (rows.stream().noneMatch(row -> row.get(fieldCode) != null)) {
+                continue;
+            }
+            IrTable target;
+            try {
+                target = schema.requireTable(config.targetTableId());
+            } catch (IllegalArgumentException error) {
+                continue;
+            }
+            Set<String> ids = new java.util.LinkedHashSet<>();
+            for (Map<String, Object> row : rows) {
+                ids.addAll(relationIds(row.get(fieldCode)));
+            }
+            if (ids.isEmpty()) {
+                continue;
+            }
+            Map<String, String> labels = fetchRelationLabels(
+                    appId, target, displayCode(target, config), ids, permissions);
+            if (labels.isEmpty()) {
+                continue;
+            }
+            for (Map<String, Object> row : rows) {
+                List<String> rowIds = relationIds(row.get(fieldCode));
+                if (rowIds.isEmpty()) {
+                    continue;
+                }
+                StringJoiner display = new StringJoiner("、");
+                rowIds.forEach(id -> display.add(labels.getOrDefault(id, id)));
+                row.put(fieldCode + "_display", display.toString());
+            }
+        }
+    }
+
+    private Map<String, String> fetchRelationLabels(
+            String appId,
+            IrTable target,
+            String displayCode,
+            Set<String> ids,
+            PermissionContext permissions) {
+
+        List<String> fields = displayCode == null ? List.of() : List.of(displayCode);
+        QueryRequest request = new QueryRequest(
+                fields,
+                new FilterNode.Compare(ID_COLUMN, ConditionOperator.IN, new ArrayList<>(ids)),
+                List.of(),
+                1,
+                Math.min(ids.size(), QueryRequest.MAX_PAGE_SIZE));
+        try {
+            Rewritten rewritten = rewrite(appId, target.tableId(), request, permissions);
+            List<Map<String, Object>> targetRows = queryRaw(appId, rewritten, permissions);
+            Map<String, String> labels = new java.util.LinkedHashMap<>();
+            for (Map<String, Object> row : targetRows) {
+                Object id = row.get(ID_COLUMN);
+                if (id == null) {
+                    continue;
+                }
+                Object label = displayCode == null ? null : row.get(displayCode);
+                labels.put(String.valueOf(id),
+                        label == null ? String.valueOf(id) : String.valueOf(label));
+            }
+            return labels;
+        } catch (RuntimeException error) {
+            return Map.of();
+        }
+    }
+
+    private String displayCode(IrTable target, FieldConfig.RelationConfig config) {
+        if (config.displayFieldId() != null) {
+            IrColumn configured = target.columnByFieldId(config.displayFieldId());
+            if (configured != null) {
+                return configured.fieldCode();
+            }
+        }
+        try {
+            return target.nameColumn().fieldCode();
+        } catch (RuntimeException error) {
+            return null;
+        }
+    }
+
+    /**
+     * 关联值既可能是单个 id，也可能是 JSON 数组文本；统一解析为 id 列表。
+     */
+    private List<String> relationIds(Object raw) {
+        if (raw == null) {
+            return List.of();
+        }
+        if (raw instanceof java.util.Collection<?> values) {
+            return values.stream().filter(Objects::nonNull).map(String::valueOf).toList();
+        }
+        String text = String.valueOf(raw).trim();
+        if (text.isEmpty()) {
+            return List.of();
+        }
+        if (text.startsWith("[") && text.endsWith("]")) {
+            String body = text.substring(1, text.length() - 1).trim();
+            if (body.isEmpty()) {
+                return List.of();
+            }
+            return java.util.Arrays.stream(body.split(","))
+                    .map(item -> item.trim().replaceAll("^\"|\"$", ""))
+                    .filter(item -> !item.isEmpty())
+                    .toList();
+        }
+        return List.of(text);
     }
 
     private NormalizedSchema schemaOf(SchemaSnapshot snapshot) {

@@ -1,7 +1,7 @@
-package io.github.ayongbox.daos.runtime.view;
+package io.github.ayongbox.daos.runtime.app;
 
 /**
- * 应用还没有可用的生效快照，视图相关内容一律视为不存在。
+ * 应用还没有可用的生效快照，运行期资源视为不存在。
  */
 public class AppNotPublishedException extends RuntimeException {
 

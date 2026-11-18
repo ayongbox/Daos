@@ -14,15 +14,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * 数据访问门面。只执行已经渲染完成的参数化语句，不做编译、不做权限判断。
  *
  * <p>所有业务读写必须经过该层；返回值按列别名组织，调用方可直接按字段编码取值。</p>
+ *
+ * <p>事务通过线程绑定连接实现：同一线程内 {@link #inTransaction(Supplier)} 期间
+ * 的所有读写复用同一连接，异常整体回滚。</p>
  */
 public final class DataAccessFacade {
 
     private final DataSource dataSource;
+    private final ThreadLocal<Connection> transactionConnection = new ThreadLocal<>();
 
     public DataAccessFacade(DataSource dataSource) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
@@ -30,22 +35,87 @@ public final class DataAccessFacade {
 
     public List<Map<String, Object>> query(SqlStatement statement) {
         Objects.requireNonNull(statement, "statement");
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement prepared = prepare(connection, statement);
-             ResultSet resultSet = prepared.executeQuery()) {
-            return readRows(resultSet);
+        Connection connection = null;
+        try {
+            connection = acquire();
+            try (PreparedStatement prepared = prepare(connection, statement);
+                 ResultSet resultSet = prepared.executeQuery()) {
+                return readRows(resultSet);
+            }
         } catch (SQLException error) {
             throw new SqlExecutionException("查询执行失败: " + statement.sql(), error);
+        } finally {
+            closeIfOwned(connection);
         }
     }
 
     public int update(SqlStatement statement) {
         Objects.requireNonNull(statement, "statement");
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement prepared = prepare(connection, statement)) {
-            return prepared.executeUpdate();
+        Connection connection = null;
+        try {
+            connection = acquire();
+            try (PreparedStatement prepared = prepare(connection, statement)) {
+                return prepared.executeUpdate();
+            }
         } catch (SQLException error) {
             throw new SqlExecutionException("写入执行失败: " + statement.sql(), error);
+        } finally {
+            closeIfOwned(connection);
+        }
+    }
+
+    /**
+     * 在同一事务内执行工作单元。已处于事务中时直接复用当前连接，便于组合调用。
+     */
+    public <T> T inTransaction(Supplier<T> work) {
+        Objects.requireNonNull(work, "work");
+        if (transactionConnection.get() != null) {
+            return work.get();
+        }
+        Connection connection = null;
+        try {
+            connection = dataSource.getConnection();
+            boolean autoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            transactionConnection.set(connection);
+            try {
+                T result = work.get();
+                connection.commit();
+                return result;
+            } catch (RuntimeException error) {
+                connection.rollback();
+                throw error;
+            } finally {
+                transactionConnection.remove();
+                connection.setAutoCommit(autoCommit);
+            }
+        } catch (SQLException error) {
+            throw new SqlExecutionException("事务执行失败: " + error.getMessage(), error);
+        } finally {
+            closeQuietly(connection);
+        }
+    }
+
+    private Connection acquire() throws SQLException {
+        Connection bound = transactionConnection.get();
+        return bound != null ? bound : dataSource.getConnection();
+    }
+
+    private void closeIfOwned(Connection connection) {
+        if (connection == null || transactionConnection.get() == connection) {
+            return;
+        }
+        closeQuietly(connection);
+    }
+
+    private void closeQuietly(Connection connection) {
+        if (connection == null) {
+            return;
+        }
+        try {
+            connection.close();
+        } catch (SQLException ignored) {
+            // 连接已不可用时无需覆盖原始异常。
         }
     }
 

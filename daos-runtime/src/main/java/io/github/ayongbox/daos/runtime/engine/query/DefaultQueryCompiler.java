@@ -27,6 +27,8 @@ import java.util.Set;
  */
 public final class DefaultQueryCompiler implements QueryCompiler {
 
+    private static final String ID_COLUMN = "id";
+
     private static final Set<ConditionOperator> LOGICAL_OPERATORS = EnumSet.of(
             ConditionOperator.EQ,
             ConditionOperator.NE,
@@ -205,10 +207,11 @@ public final class DefaultQueryCompiler implements QueryCompiler {
             throw new QueryCompileException(
                     "运算符 " + compare.operator().code() + " 必须在权限重写阶段解析，编译阶段拒绝");
         }
-        return new FilterNode.Compare(
-                requireFilterable(table, compare.column()).physicalName(),
-                compare.operator(),
-                compare.values());
+        // 主键是系统列，不在字段元数据中，但关联解析与按 id 查询需要按它过滤。
+        String column = ID_COLUMN.equals(compare.column())
+                ? ID_COLUMN
+                : requireFilterable(table, compare.column()).physicalName();
+        return new FilterNode.Compare(column, compare.operator(), compare.values());
     }
 
     private List<FilterNode> rewriteChildren(IrTable table, List<FilterNode> children) {

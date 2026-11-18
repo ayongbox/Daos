@@ -126,6 +126,22 @@ export interface RecordPage {
   records: Record<string, unknown>[];
 }
 
+export interface RelationOption {
+  value: string;
+  label: string;
+}
+
+/** 主表值 + 按子表单表单项 id 分组的子表行。 */
+export interface FormRecordPayload {
+  values: Record<string, unknown>;
+  subforms: Record<string, Record<string, unknown>[]>;
+}
+
+export interface FormRecordDetail {
+  record: Record<string, unknown>;
+  subforms: Record<string, Record<string, unknown>[]>;
+}
+
 export interface ViewSummary {
   viewId: string;
   viewCode: string;
@@ -246,6 +262,41 @@ export const api = {
     client.post<{ id: string }>(
       `/api/apps/${appId}/tables/${encodeURIComponent(tableCode)}/records`,
       values
+    ),
+  createFormRecord: (appId: string, formCode: string, body: FormRecordPayload) =>
+    client.post<{ id: string }>(
+      `/api/apps/${appId}/forms/${encodeURIComponent(formCode)}/records`,
+      body
+    ),
+  formRecord: (appId: string, formCode: string, recordId: string) =>
+    client.get<FormRecordDetail>(
+      `/api/apps/${appId}/forms/${encodeURIComponent(formCode)}/records/${encodeURIComponent(recordId)}`
+    ),
+  updateFormRecord: (
+    appId: string,
+    formCode: string,
+    recordId: string,
+    version: number,
+    body: FormRecordPayload
+  ) =>
+    client.put<{ affected: number }>(
+      `/api/apps/${appId}/forms/${encodeURIComponent(formCode)}/records/${encodeURIComponent(recordId)}?version=${version}`,
+      body
+    ),
+  deleteFormRecord: (appId: string, formCode: string, recordId: string, version: number) =>
+    client.delete<{ affected: number }>(
+      `/api/apps/${appId}/forms/${encodeURIComponent(formCode)}/records/${encodeURIComponent(recordId)}?version=${version}`
+    ),
+  relationOptions: (
+    appId: string,
+    tableCode: string,
+    fieldCode: string,
+    keyword = '',
+    limit = 20
+  ) =>
+    client.get<RelationOption[]>(
+      `/api/apps/${appId}/tables/${encodeURIComponent(tableCode)}/records/relation-options` +
+        `?field=${encodeURIComponent(fieldCode)}&keyword=${encodeURIComponent(keyword)}&limit=${limit}`
     ),
   views: (appId: string) => client.get<ViewSummary[]>(`/api/apps/${appId}/views`),
   view: (appId: string, viewCode: string) =>
