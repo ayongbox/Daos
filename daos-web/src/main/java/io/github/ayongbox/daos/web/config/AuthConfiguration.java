@@ -7,6 +7,7 @@ import io.github.ayongbox.daos.core.metadata.identity.MemberStatus;
 import io.github.ayongbox.daos.core.metadata.identity.OrgMember;
 import io.github.ayongbox.daos.core.spi.AccountStore;
 import io.github.ayongbox.daos.core.spi.AuditStore;
+import io.github.ayongbox.daos.core.spi.DictionaryStore;
 import io.github.ayongbox.daos.core.spi.IdentityStore;
 import io.github.ayongbox.daos.core.spi.MetadataStore;
 import io.github.ayongbox.daos.core.spi.SessionStore;
@@ -15,6 +16,9 @@ import io.github.ayongbox.daos.runtime.audit.AuditLog;
 import io.github.ayongbox.daos.runtime.app.AppService;
 import io.github.ayongbox.daos.runtime.auth.AuthenticationService;
 import io.github.ayongbox.daos.runtime.auth.Pbkdf2PasswordHasher;
+import io.github.ayongbox.daos.runtime.dictionary.DictionaryAdminService;
+import io.github.ayongbox.daos.runtime.identity.IdentityAdminQueryService;
+import io.github.ayongbox.daos.runtime.identity.IdentityAdminService;
 import io.github.ayongbox.daos.runtime.identity.PermissionContextFactory;
 import io.github.ayongbox.daos.runtime.identity.SessionPermissionService;
 import io.github.ayongbox.baseon.core.secure.PermissionChecker;
@@ -85,6 +89,26 @@ public class AuthConfiguration {
             PasswordHasher passwordHasher,
             AuditLog auditLog) {
         return new AuthenticationService(accountStore, sessionStore, passwordHasher, auditLog);
+    }
+
+    @Bean
+    public IdentityAdminService identityAdminService(
+            IdentityStore identityStore,
+            AccountStore accountStore,
+            PasswordHasher passwordHasher,
+            AuditLog auditLog) {
+        return new IdentityAdminService(
+                identityStore, accountStore, passwordHasher, auditLog, Clock.systemUTC());
+    }
+
+    @Bean
+    public IdentityAdminQueryService identityAdminQueryService(IdentityStore identityStore) {
+        return new IdentityAdminQueryService(identityStore);
+    }
+
+    @Bean
+    public DictionaryAdminService dictionaryAdminService(DictionaryStore dictionaryStore) {
+        return new DictionaryAdminService(dictionaryStore, Clock.systemUTC());
     }
 
     @Bean

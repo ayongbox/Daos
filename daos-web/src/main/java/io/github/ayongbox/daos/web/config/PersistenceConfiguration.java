@@ -3,6 +3,7 @@ package io.github.ayongbox.daos.web.config;
 import io.github.ayongbox.daos.core.pipeline.dialect.SqlDialect;
 import io.github.ayongbox.daos.core.spi.AccountStore;
 import io.github.ayongbox.daos.core.spi.AuditStore;
+import io.github.ayongbox.daos.core.spi.DictionaryStore;
 import io.github.ayongbox.daos.core.spi.FileStore;
 import io.github.ayongbox.daos.core.spi.IdentityStore;
 import io.github.ayongbox.daos.core.spi.MetadataStore;
@@ -11,6 +12,7 @@ import io.github.ayongbox.daos.core.spi.SessionStore;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
 import io.github.ayongbox.daos.runtime.store.jdbc.JdbcAccountStore;
 import io.github.ayongbox.daos.runtime.store.jdbc.JdbcAuditStore;
+import io.github.ayongbox.daos.runtime.store.jdbc.JdbcDictionaryStore;
 import io.github.ayongbox.daos.runtime.store.jdbc.JdbcFileStore;
 import io.github.ayongbox.daos.runtime.store.jdbc.JdbcIdentityStore;
 import io.github.ayongbox.daos.runtime.store.jdbc.JdbcMetadataStore;
@@ -73,6 +75,11 @@ public class PersistenceConfiguration {
     @Bean
     public AccountStore accountStore(JdbcTemplate jdbcTemplate, JsonCodec jsonCodec) {
         return new JdbcAccountStore(jdbcTemplate, jsonCodec);
+    }
+
+    @Bean
+    public DictionaryStore dictionaryStore(JdbcTemplate jdbcTemplate, JsonCodec jsonCodec) {
+        return new JdbcDictionaryStore(jdbcTemplate, jsonCodec);
     }
 
     @Bean

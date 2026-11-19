@@ -47,6 +47,7 @@ import {
   type MigrationPlan,
   type MigrationRecord
 } from './api';
+import { AdminPage } from './AdminPage';
 import { AppIcon, AppIconPicker } from './appIcons';
 import { AppRuntime } from './AppRuntime';
 import { AppWorkbench } from './AppWorkbench';
@@ -247,6 +248,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
   const [apps, setApps] = useState<AppSummary[]>([]);
   const [appId, setAppId] = useState<string | null>(null);
   const [capability, setCapability] = useState<Capability>('home');
+  const [adminOpen, setAdminOpen] = useState(false);
   const [runtimeMenuId, setRuntimeMenuId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SchemaApp | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -844,6 +846,11 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
     ...apps.map((app) => ({ value: app.id, label: app.displayName }))
   ];
 
+  // 管理后台与控制台同级切换：进入后整页展示，返回时控制台草稿状态保持不变
+  if (adminOpen) {
+    return <AdminPage onBack={() => setAdminOpen(false)} />;
+  }
+
   return (
     <Layout style={{ height: '100vh', overflow: 'hidden' }}>
       <Header
@@ -893,6 +900,9 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
             未保存
           </Tag>
         ) : null}
+        <Button type="text" onClick={() => setAdminOpen(true)}>
+          管理后台
+        </Button>
         <Button type="text" onClick={onLogout}>
           退出
         </Button>

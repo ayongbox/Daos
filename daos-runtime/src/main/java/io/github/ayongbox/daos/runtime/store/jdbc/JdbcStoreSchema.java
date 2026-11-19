@@ -146,6 +146,16 @@ public final class JdbcStoreSchema {
                   payload %s NOT NULL,
                   PRIMARY KEY (file_id)
                 )
+                """.formatted(largeText),
+                """
+                CREATE TABLE IF NOT EXISTS daos_dictionary (
+                  app_id VARCHAR(64) NOT NULL,
+                  code VARCHAR(64) NOT NULL,
+                  deleted BOOLEAN NOT NULL,
+                  updated_at VARCHAR(40) NOT NULL,
+                  payload %s NOT NULL,
+                  PRIMARY KEY (app_id, code)
+                )
                 """.formatted(largeText));
     }
 }

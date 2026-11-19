@@ -240,6 +240,76 @@ export interface MenuSummary {
   layout?: PageLayout | null;
 }
 
+export interface DepartmentView {
+  id: string;
+  parentId: string | null;
+  code: string;
+  name: string;
+  path: string | null;
+  sortOrder: number;
+  deleted: boolean;
+}
+
+export type MemberStatus = 'ACTIVE' | 'DISABLED';
+
+export interface MemberView {
+  id: string;
+  username: string;
+  displayName: string;
+  deptId: string | null;
+  deptName: string | null;
+  status: MemberStatus;
+  createdAt: string;
+}
+
+export interface DictionaryItemView {
+  id: string;
+  parentId?: string | null;
+  code: string;
+  label: string;
+  value?: string | null;
+  color?: string | null;
+  icon?: string | null;
+  sortOrder: number;
+  enabled: boolean;
+  defaultSelected: boolean;
+  description?: string | null;
+}
+
+export interface DictionaryView {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  tree: boolean;
+  enabled: boolean;
+  items: DictionaryItemView[];
+  updatedAt: string;
+}
+
+/** 字典项保存入参：已有项携带 id，新建项由后端生成 id。 */
+export interface DictionaryItemInput {
+  id?: string;
+  parentId?: string | null;
+  code: string;
+  label: string;
+  value?: string | null;
+  color?: string | null;
+  icon?: string | null;
+  sortOrder: number;
+  enabled: boolean;
+  defaultSelected: boolean;
+  description?: string | null;
+}
+
+export interface DictionarySaveBody {
+  name: string;
+  description?: string;
+  tree?: boolean;
+  enabled?: boolean;
+  items: DictionaryItemInput[];
+}
+
 export const api = {
   login: (tenantId: string, username: string, password: string) =>
     client.post<LoginResponse>('/api/auth/login', { tenantId, username, password }),
@@ -327,5 +397,38 @@ export const api = {
     client.get<Record<string, unknown>>(
       `/api/apps/${appId}/views/${encodeURIComponent(viewCode)}/summary`
     ),
-  menus: (appId: string) => client.get<MenuSummary[]>(`/api/apps/${appId}/menus`)
+  menus: (appId: string) => client.get<MenuSummary[]>(`/api/apps/${appId}/menus`),
+  listDepartments: () => client.get<DepartmentView[]>('/api/admin/departments'),
+  createDepartment: (body: { parentId?: string; code: string; name: string }) =>
+    client.post<DepartmentView>('/api/admin/departments', body),
+  updateDepartment: (
+    id: string,
+    body: { name?: string; parentId?: string; sortOrder?: number }
+  ) => client.put<DepartmentView>(`/api/admin/departments/${id}`, body),
+  deleteDepartment: (id: string) => client.delete<void>(`/api/admin/departments/${id}`),
+  listMembers: () => client.get<MemberView[]>('/api/admin/members'),
+  createMember: (body: {
+    username: string;
+    displayName: string;
+    password: string;
+    deptId?: string;
+  }) => client.post<MemberView>('/api/admin/members', body),
+  updateMember: (
+    id: string,
+    body: {
+      displayName?: string;
+      deptId?: string | null;
+      status?: MemberStatus;
+      password?: string;
+    }
+  ) => client.put<MemberView>(`/api/admin/members/${id}`, body),
+  listDictionaries: (appId: string) =>
+    client.get<DictionaryView[]>(`/api/apps/${appId}/dictionaries`),
+  saveDictionary: (appId: string, code: string, body: DictionarySaveBody) =>
+    client.put<DictionaryView>(
+      `/api/apps/${appId}/dictionaries/${encodeURIComponent(code)}`,
+      body
+    ),
+  deleteDictionary: (appId: string, code: string) =>
+    client.delete<void>(`/api/apps/${appId}/dictionaries/${encodeURIComponent(code)}`)
 };
