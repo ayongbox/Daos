@@ -66,8 +66,11 @@ public class AuthConfiguration {
     }
 
     @Bean
-    public AppService appService(MetadataStore metadataStore, IdentityStore identityStore) {
-        return new AppService(metadataStore, identityStore, Clock.systemUTC());
+    public AppService appService(
+            MetadataStore metadataStore,
+            IdentityStore identityStore,
+            SnapshotStore snapshotStore) {
+        return new AppService(metadataStore, identityStore, snapshotStore, Clock.systemUTC());
     }
 
     @Bean

@@ -13,8 +13,11 @@ import io.github.ayongbox.daos.core.metadata.identity.RoleScope;
 import io.github.ayongbox.daos.core.metadata.permission.PermissionSubject;
 import io.github.ayongbox.daos.core.metadata.permission.ResourceRef;
 import io.github.ayongbox.daos.core.metadata.permission.SchemaPermission;
+import io.github.ayongbox.daos.core.snapshot.SchemaSnapshot;
 import io.github.ayongbox.daos.core.spi.IdentityStore;
 import io.github.ayongbox.daos.core.spi.MetadataStore;
+import io.github.ayongbox.daos.core.spi.SnapshotStore;
+import io.github.ayongbox.daos.runtime.engine.SchemaContentHasher;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -22,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 应用草稿管理。创建应用时同时建立「应用所有者」角色与设计/发布权限，并绑定创建人，
@@ -38,16 +42,42 @@ public final class AppService {
 
     private final MetadataStore metadataStore;
     private final IdentityStore identityStore;
+    private final SnapshotStore snapshotStore;
     private final Clock clock;
+    private final SchemaContentHasher contentHasher = new SchemaContentHasher();
 
-    public AppService(MetadataStore metadataStore, IdentityStore identityStore, Clock clock) {
+    public AppService(
+            MetadataStore metadataStore,
+            IdentityStore identityStore,
+            SnapshotStore snapshotStore,
+            Clock clock) {
         this.metadataStore = Objects.requireNonNull(metadataStore, "metadataStore");
         this.identityStore = Objects.requireNonNull(identityStore, "identityStore");
+        this.snapshotStore = Objects.requireNonNull(snapshotStore, "snapshotStore");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     public List<SchemaApp> listDrafts() {
         return metadataStore.findAllDrafts();
+    }
+
+    /**
+     * 应用的发布状态。生效版本取自快照指针，草稿改动通过内容哈希比对得出，
+     * 与草稿记录自身的 status 无关。
+     */
+    public ReleaseInfo releaseInfo(SchemaApp app) {
+        Objects.requireNonNull(app, "app");
+        Optional<SchemaSnapshot> active = snapshotStore.findActive(app.id());
+        if (active.isEmpty()) {
+            return new ReleaseInfo(0L, false);
+        }
+        SchemaSnapshot snapshot = active.get();
+        return new ReleaseInfo(
+                snapshot.releaseVersion(),
+                !contentHasher.hash(app).equals(snapshot.contentHash()));
+    }
+
+    public record ReleaseInfo(long activeReleaseVersion, boolean changedSinceRelease) {
     }
 
     /**

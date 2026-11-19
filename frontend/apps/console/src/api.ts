@@ -29,6 +29,8 @@ export interface AppSummary {
   description?: string | null;
   icon?: string | null;
   status: string;
+  activeReleaseVersion: number;
+  changedSinceRelease: boolean;
   tableCount: number;
   updatedAt?: string | null;
 }

@@ -289,11 +289,13 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
       ? selectedTable.fields.find((field) => field.id === fieldModal.fieldId) ?? null
       : null;
 
+  /** 重新拉取应用列表，用于发布或返回列表时刷新发布状态。 */
+  function refreshApps() {
+    api.listApps().then(setApps).catch(showError);
+  }
+
   useEffect(() => {
-    api
-      .listApps()
-      .then(setApps)
-      .catch(showError);
+    refreshApps();
     api.fieldTypes().then(setFieldTypes).catch(showError);
   }, []);
 
@@ -332,6 +334,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
   function switchApp(nextAppId: string | null) {
     if (nextAppId === appId) return;
     if (dirty && !window.confirm('当前草稿未保存，确认离开？')) return;
+    if (nextAppId === null) refreshApps();
     setAppId(nextAppId);
   }
 
@@ -678,6 +681,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         try {
           await api.apply(draft.id);
           await reloadDraft(draft.id);
+          refreshApps();
           message.success('发布成功');
         } catch (cause) {
           showError(cause);
@@ -958,35 +962,66 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                   }}
                 >
                   {apps.map((app) => (
-                    <Card key={app.id} hoverable onClick={() => switchApp(app.id)}>
+                    <Card
+                      key={app.id}
+                      hoverable
+                      style={{ height: '100%' }}
+                      onClick={() => switchApp(app.id)}
+                    >
                       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                         <AppIcon icon={app.icon} name={app.displayName} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: 8
-                            }}
-                          >
-                            <Typography.Text strong ellipsis style={{ fontSize: 15 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Typography.Text
+                              strong
+                              ellipsis
+                              style={{ flex: 1, minWidth: 0, fontSize: 15 }}
+                            >
                               {app.displayName}
                             </Typography.Text>
-                            <Tag style={{ marginInlineEnd: 0 }}>
-                              {app.status === 'PUBLISHED' ? '已发布' : '草稿'}
-                            </Tag>
+                            <Popconfirm
+                              title="删除这个应用？"
+                              description="应用与表配置将不可恢复"
+                              okText="删除"
+                              cancelText="取消"
+                              okButtonProps={{ danger: true }}
+                              onConfirm={() => deleteApp(app.id)}
+                            >
+                              <Button
+                                type="text"
+                                size="small"
+                                danger
+                                style={{ flexShrink: 0 }}
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                删除
+                              </Button>
+                            </Popconfirm>
                           </div>
+                          <Space size={4} style={{ marginTop: 6 }}>
+                            {app.activeReleaseVersion > 0 ? (
+                              <Tag color="green" style={{ marginInlineEnd: 0 }}>
+                                已发布 v{app.activeReleaseVersion}
+                              </Tag>
+                            ) : (
+                              <Tag style={{ marginInlineEnd: 0 }}>未发布</Tag>
+                            )}
+                            {app.changedSinceRelease ? (
+                              <Tag color="orange" style={{ marginInlineEnd: 0 }}>
+                                未发布改动
+                              </Tag>
+                            ) : null}
+                          </Space>
                           <div
                             style={{
                               color: tokens.colorTextSecondary,
                               fontSize: tokens.fontSizeSm,
-                              marginTop: 4,
-                              minHeight: 20,
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden'
+                              marginTop: 6,
+                              height: 20,
+                              lineHeight: '20px',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
                             }}
                           >
                             {app.description?.trim() || '暂无描述'}
@@ -994,34 +1029,8 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                         </div>
                       </div>
                       <Divider style={{ margin: '12px 0' }} />
-                      <div
-                        onClick={(event) => event.stopPropagation()}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          color: tokens.colorTextTertiary,
-                          fontSize: tokens.fontSizeSm
-                        }}
-                      >
-                        <span>{app.tableCount} 张表</span>
-                        <Popconfirm
-                          title="删除这个应用？"
-                          description="应用与表配置将不可恢复"
-                          okText="删除"
-                          cancelText="取消"
-                          okButtonProps={{ danger: true }}
-                          onConfirm={() => deleteApp(app.id)}
-                        >
-                          <Button
-                            type="text"
-                            size="small"
-                            danger
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            删除
-                          </Button>
-                        </Popconfirm>
+                      <div style={{ color: tokens.colorTextTertiary, fontSize: tokens.fontSizeSm }}>
+                        {app.tableCount} 张表
                       </div>
                     </Card>
                   ))}

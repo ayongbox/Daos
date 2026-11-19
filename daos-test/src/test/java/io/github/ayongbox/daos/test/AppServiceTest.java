@@ -36,6 +36,7 @@ class AppServiceTest {
 
     private InMemoryMetadataStore metadataStore;
     private InMemoryIdentityStore identityStore;
+    private InMemorySnapshotStore snapshotStore;
     private AppService appService;
     private SessionPermissionService permissionService;
     private Session session;
@@ -48,10 +49,10 @@ class AppServiceTest {
                 "member-1", "tenant-1", "alice", "Alice", null, null, null,
                 MemberStatus.ACTIVE, Map.of(), "test", Instant.now(CLOCK).toString(),
                 "test", Instant.now(CLOCK).toString(), false, 1));
-        appService = new AppService(metadataStore, identityStore, CLOCK);
+        snapshotStore = new InMemorySnapshotStore();
+        appService = new AppService(metadataStore, identityStore, snapshotStore, CLOCK);
         permissionService = new SessionPermissionService(
-                new InMemorySnapshotStore(), metadataStore,
-                new PermissionContextFactory(identityStore));
+                snapshotStore, metadataStore, new PermissionContextFactory(identityStore));
         session = new Session(
                 "session-1", "tenant-1", "subject-1", "alice", "member-1",
                 "hash", Instant.now(CLOCK), Instant.now(CLOCK).plusSeconds(3600),

@@ -5,9 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.ayongbox.baseon.core.context.SecurityUtil;
 import io.github.ayongbox.baseon.core.model.LoginUser;
 import io.github.ayongbox.daos.core.auth.Session;
+import io.github.ayongbox.daos.core.metadata.app.SchemaApp;
 import io.github.ayongbox.daos.core.metadata.identity.MemberStatus;
+import io.github.ayongbox.daos.core.snapshot.SchemaSnapshot;
 import io.github.ayongbox.daos.core.metadata.identity.OrgMember;
 import io.github.ayongbox.daos.runtime.app.AppService;
+import io.github.ayongbox.daos.runtime.engine.SchemaContentHasher;
 import io.github.ayongbox.daos.runtime.engine.SchemaEvolutionService;
 import io.github.ayongbox.daos.runtime.engine.ddl.DefaultMigrationCompiler;
 import io.github.ayongbox.daos.runtime.engine.dialect.PostgresDialect;
@@ -51,6 +54,7 @@ class AppApiTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final InMemoryMetadataStore metadataStore = new InMemoryMetadataStore();
+    private InMemorySnapshotStore snapshotStore;
     private MockMvc mvc;
     private Session session;
 
@@ -67,7 +71,7 @@ class AppApiTest {
                         MemberStatus.ACTIVE, Map.of(), "system", TIMESTAMP,
                         "system", TIMESTAMP, false, 1)),
                 List.of(), List.of());
-        InMemorySnapshotStore snapshotStore = new InMemorySnapshotStore();
+        snapshotStore = new InMemorySnapshotStore();
         SessionPermissionService permissionService = new SessionPermissionService(
                 snapshotStore, metadataStore, new PermissionContextFactory(identityStore));
         DaosPermissionChecker permissionChecker = new DaosPermissionChecker(permissionService);
@@ -77,7 +81,9 @@ class AppApiTest {
 
         mvc = MockMvcBuilders.standaloneSetup(
                         new AppController(
-                                new AppService(metadataStore, identityStore, Clock.systemUTC()),
+                                new AppService(
+                                        metadataStore, identityStore, snapshotStore,
+                                        Clock.systemUTC()),
                                 permissionChecker),
                         new SchemaEvolutionController(
                                 metadataStore, evolutionService, permissionChecker),
@@ -110,6 +116,42 @@ class AppApiTest {
                 .andExpect(jsonPath("$.data.code").value("crm"))
                 .andExpect(jsonPath("$.data.status").value("DRAFT"))
                 .andExpect(jsonPath("$.data.permissions.length()").value(2));
+    }
+
+    @Test
+    void listExposesActiveReleaseAndDraftChangeFlag() throws Exception {
+        String appId = createApp();
+
+        mvc.perform(get("/api/apps")
+                        .requestAttr(SessionAuthInterceptor.SESSION_ATTRIBUTE, session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].activeReleaseVersion").value(0))
+                .andExpect(jsonPath("$.data[0].changedSinceRelease").value(false));
+
+        SchemaApp published = metadataStore.findDraft(appId).orElseThrow();
+        snapshotStore.append(new SchemaSnapshot(
+                "s-1", appId, published.code(), 1L, published.schemaVersion(),
+                new SchemaContentHasher().hash(published), "alice", TIMESTAMP, published));
+        snapshotStore.activate(appId, "s-1");
+
+        mvc.perform(get("/api/apps")
+                        .requestAttr(SessionAuthInterceptor.SESSION_ATTRIBUTE, session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].activeReleaseVersion").value(1))
+                .andExpect(jsonPath("$.data[0].changedSinceRelease").value(false));
+
+        SchemaApp draft = metadataStore.findDraft(appId).orElseThrow();
+        metadataStore.saveDraft(new SchemaApp(
+                draft.id(), draft.code(), "客户管理改版", draft.description(), draft.icon(),
+                draft.status(), draft.tables(), draft.forms(), draft.permissions(), draft.ext(),
+                draft.createdBy(), draft.createdAt(), draft.updatedBy(), draft.updatedAt(),
+                draft.deleted(), draft.schemaVersion()));
+
+        mvc.perform(get("/api/apps")
+                        .requestAttr(SessionAuthInterceptor.SESSION_ATTRIBUTE, session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].activeReleaseVersion").value(1))
+                .andExpect(jsonPath("$.data[0].changedSinceRelease").value(true));
     }
 
     @Test

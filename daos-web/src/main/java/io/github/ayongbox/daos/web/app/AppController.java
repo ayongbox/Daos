@@ -37,7 +37,9 @@ public class AppController {
 
     @GetMapping
     public R<List<AppSummary>> list() {
-        return R.ok(appService.listDrafts().stream().map(AppSummary::of).toList());
+        return R.ok(appService.listDrafts().stream()
+                .map(app -> AppSummary.of(app, appService.releaseInfo(app)))
+                .toList());
     }
 
     @PostMapping
@@ -46,7 +48,7 @@ public class AppController {
         SchemaApp app = appService.create(
                 session.tenantId(), session.memberId(), session.username(),
                 body.code(), body.displayName(), body.description(), body.icon());
-        return R.ok(AppSummary.of(app));
+        return R.ok(AppSummary.of(app, appService.releaseInfo(app)));
     }
 
     @DeleteMapping("/{appId}")
@@ -80,13 +82,16 @@ public class AppController {
             String description,
             String icon,
             String status,
+            long activeReleaseVersion,
+            boolean changedSinceRelease,
             int tableCount,
             String updatedAt) {
 
-        static AppSummary of(SchemaApp app) {
+        static AppSummary of(SchemaApp app, AppService.ReleaseInfo release) {
             return new AppSummary(
                     app.id(), app.code(), app.displayName(), app.description(), app.icon(),
-                    app.status().name(), app.tables().size(), app.updatedAt());
+                    app.status().name(), release.activeReleaseVersion(),
+                    release.changedSinceRelease(), app.tables().size(), app.updatedAt());
         }
     }
 }
