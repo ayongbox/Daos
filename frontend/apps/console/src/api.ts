@@ -6,6 +6,7 @@ import type {
   LinkageRule,
   SchemaApp
 } from '@daos/metadata';
+import type { PageLayout } from './pageLayout';
 
 const TOKEN_KEY = 'daos.token';
 
@@ -235,6 +236,8 @@ export interface MenuSummary {
   menuType: 'VIEW' | 'FORM' | 'TABLE';
   targetId: string;
   targetCode?: string | null;
+  formCode?: string | null;
+  layout?: PageLayout | null;
 }
 
 export const api = {

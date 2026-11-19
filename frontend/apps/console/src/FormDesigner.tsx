@@ -307,7 +307,7 @@ function toFormField(field: SchemaField, sortOrder: number): FormField {
   };
 }
 
-function createForm(app: SchemaApp, table: SchemaTable, displayName: string): SchemaForm {
+export function createForm(app: SchemaApp, table: SchemaTable, displayName: string): SchemaForm {
   const code = uniqueCode(`form_${table.code}`, app.forms.map((form) => form.code));
   const timestamp = new Date().toISOString();
   return {

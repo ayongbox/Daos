@@ -19,6 +19,8 @@ import io.github.ayongbox.daos.core.metadata.field.FieldConfig;
 import io.github.ayongbox.daos.core.metadata.field.FieldConstraints;
 import io.github.ayongbox.daos.core.metadata.field.FieldUiHint;
 import io.github.ayongbox.daos.core.metadata.field.SchemaField;
+import io.github.ayongbox.daos.core.metadata.form.FormType;
+import io.github.ayongbox.daos.core.metadata.form.SchemaForm;
 import io.github.ayongbox.daos.core.metadata.menu.MenuType;
 import io.github.ayongbox.daos.core.metadata.menu.SchemaMenu;
 import io.github.ayongbox.daos.core.metadata.permission.PermissionSubject;
@@ -137,6 +139,8 @@ class ViewServiceTest {
         assertEquals("按城市看客户", menus.get(1).displayName());
         assertEquals("VIEW", menus.get(1).menuType());
         assertEquals("users_by_city", menus.get(1).targetCode());
+        assertEquals("user_form", menus.get(0).formCode());
+        assertEquals("user_form", menus.get(1).formCode());
     }
 
     @Test
@@ -287,9 +291,15 @@ class ViewServiceTest {
                 "m3", APP_ID, "customers", "按城市看客户", null, MenuType.VIEW, "v1", 2, true,
                 MetadataStatus.DRAFT, Map.of(), "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
 
+        SchemaForm userForm = new SchemaForm(
+                "form-1", APP_ID, "t1", "user_form", "用户表单", null, FormType.RECORD,
+                Map.of(), List.of(), List.of(), List.of(), List.of(),
+                MetadataStatus.PUBLISHED, 1, Map.of(),
+                "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
+
         return new SchemaApp(
                 APP_ID, APP_CODE, "演示应用", null, null, MetadataStatus.DRAFT,
-                List.of(users), List.of(), List.of(view, aggregateView, havingView),
+                List.of(users), List.of(userForm), List.of(view, aggregateView, havingView),
                 List.of(tableMenu, hiddenMenu, viewMenu), List.of(), Map.of(),
                 "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
     }

@@ -11,7 +11,6 @@ import {
   Space,
   Switch,
   Table,
-  Tabs,
   Tag,
   Typography
 } from 'antd';
@@ -115,7 +114,7 @@ function uniqueCode(base: string, existing: string[]): string {
   return code;
 }
 
-function createView(app: SchemaApp, table: SchemaTable): SchemaView {
+export function createView(app: SchemaApp, table: SchemaTable): SchemaView {
   const timestamp = now();
   return {
     id: newId(),
@@ -149,24 +148,36 @@ function menuTargets(app: SchemaApp, type: MenuType) {
   return app.tables.map((table) => ({ value: table.id, label: table.displayName }));
 }
 
-function createMenu(app: SchemaApp, type: MenuType): SchemaMenu {
+export function createMenu(
+  app: SchemaApp,
+  type: MenuType,
+  overrides?: {
+    code?: string;
+    targetId?: string;
+    displayName?: string;
+    sortOrder?: number;
+    ext?: Record<string, unknown>;
+  }
+): SchemaMenu {
   const timestamp = now();
-  const target = menuTargets(app, type)[0];
+  const target = overrides?.targetId
+    ? { value: overrides.targetId, label: overrides.displayName }
+    : menuTargets(app, type)[0];
   return {
     id: newId(),
     appId: app.id,
     code: uniqueCode(
-      `menu_${(app.menus ?? []).length + 1}`,
+      overrides?.code ?? `menu_${(app.menus ?? []).length + 1}`,
       (app.menus ?? []).map((menu) => menu.code)
     ),
-    displayName: target?.label ?? '新菜单',
+    displayName: overrides?.displayName ?? target?.label ?? '新菜单',
     icon: null,
     menuType: type,
     targetId: target?.value ?? '',
-    sortOrder: (app.menus ?? []).length,
+    sortOrder: overrides?.sortOrder ?? (app.menus ?? []).length,
     visible: true,
     status: 'DRAFT',
-    ext: {},
+    ext: overrides?.ext ?? {},
     createdBy: 'console',
     createdAt: timestamp,
     updatedBy: 'console',
@@ -202,24 +213,16 @@ export function ViewDesigner({
   onChange: (next: SchemaApp) => void;
 }) {
   const { message, modal } = AntApp.useApp();
-  const [tab, setTab] = useState<'views' | 'menus'>('views');
   const views = app.views ?? [];
   const menus = app.menus ?? [];
   const [selectedViewId, setSelectedViewId] = useState<string | null>(views[0]?.id ?? null);
-  const [selectedMenuId, setSelectedMenuId] = useState<string | null>(menus[0]?.id ?? null);
 
   useEffect(() => {
     if (selectedViewId && views.some((view) => view.id === selectedViewId)) return;
     setSelectedViewId(views[0]?.id ?? null);
   }, [selectedViewId, views]);
 
-  useEffect(() => {
-    if (selectedMenuId && menus.some((menu) => menu.id === selectedMenuId)) return;
-    setSelectedMenuId(menus[0]?.id ?? null);
-  }, [selectedMenuId, menus]);
-
   const selectedView = views.find((view) => view.id === selectedViewId) ?? null;
-  const selectedMenu = menus.find((menu) => menu.id === selectedMenuId) ?? null;
   const viewTable = app.tables.find((table) => table.id === selectedView?.tableId) ?? null;
 
   function patchView(viewId: string, update: (view: SchemaView) => SchemaView) {
@@ -238,7 +241,6 @@ export function ViewDesigner({
     const view = createView(app, table);
     onChange({ ...app, views: [...views, view] });
     setSelectedViewId(view.id);
-    setTab('views');
   }
 
   function deleteView(view: SchemaView) {
@@ -262,35 +264,6 @@ export function ViewDesigner({
           )
         });
       }
-    });
-  }
-
-  function patchMenu(menuId: string, update: (menu: SchemaMenu) => SchemaMenu) {
-    onChange({
-      ...app,
-      menus: menus.map((menu) => (menu.id === menuId ? update(menu) : menu))
-    });
-  }
-
-  function addMenu() {
-    const type: MenuType = views.length > 0 ? 'VIEW' : 'FORM';
-    if (menuTargets(app, type).length === 0) {
-      message.warning('请先创建视图或表单，再添加菜单');
-      return;
-    }
-    const menu = createMenu(app, type);
-    onChange({ ...app, menus: [...menus, menu] });
-    setSelectedMenuId(menu.id);
-    setTab('menus');
-  }
-
-  function deleteMenu(menu: SchemaMenu) {
-    modal.confirm({
-      title: `删除菜单「${menu.displayName}」？`,
-      okText: '删除',
-      cancelText: '取消',
-      okButtonProps: { danger: true },
-      onOk: () => onChange({ ...app, menus: menus.filter((item) => item.id !== menu.id) })
     });
   }
 
@@ -422,20 +395,12 @@ export function ViewDesigner({
         <Space size={8} wrap>
           <Typography.Text strong>视图与报表</Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            视图定义列表列、筛选与排序；菜单定义应用入口。两者都随「发布」进入生效快照。
+            视图定义列表列、筛选与排序；页面入口在「页面」中统一配置。
           </Typography.Text>
         </Space>
       </Card>
 
-      <Tabs
-        activeKey={tab}
-        onChange={(key) => setTab(key as 'views' | 'menus')}
-        items={[
-          {
-            key: 'views',
-            label: `视图 (${views.length})`,
-            children: (
-              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <Card
                   size="small"
                   style={{ width: 240, flex: '0 0 240px' }}
@@ -1021,167 +986,7 @@ export function ViewDesigner({
                   </Card>
                 )}
               </div>
-            )
-          },
-          {
-            key: 'menus',
-            label: `菜单 (${menus.length})`,
-            children: (
-              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                <Card
-                  size="small"
-                  style={{ width: 240, flex: '0 0 240px' }}
-                  title="菜单"
-                  extra={
-                    <Button size="small" type="text" onClick={addMenu}>
-                      新建
-                    </Button>
-                  }
-                >
-                  <List
-                    size="small"
-                    dataSource={[...menus].sort((a, b) => a.sortOrder - b.sortOrder)}
-                    locale={{ emptyText: '暂无菜单' }}
-                    renderItem={(menu) => (
-                      <List.Item
-                        style={{
-                          cursor: 'pointer',
-                          borderRadius: tokens.radiusSm,
-                          paddingInline: 12,
-                          background: menu.id === selectedMenuId ? tokens.colorPrimaryBg : undefined
-                        }}
-                        onClick={() => setSelectedMenuId(menu.id)}
-                      >
-                        <List.Item.Meta
-                          title={
-                            <Space size={6}>
-                              <span>{menu.displayName}</span>
-                              {menu.visible ? null : <Tag>隐藏</Tag>}
-                            </Space>
-                          }
-                          description={menu.menuType === 'VIEW' ? '视图' : '表单'}
-                        />
-                      </List.Item>
-                    )}
-                  />
-                </Card>
 
-                {selectedMenu ? (
-                  <Card
-                    size="small"
-                    style={{ flex: 1, minWidth: 420 }}
-                    title="菜单配置"
-                    extra={
-                      <Button size="small" danger type="text" onClick={() => deleteMenu(selectedMenu)}>
-                        删除菜单
-                      </Button>
-                    }
-                  >
-                    <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                      <Space size={12} wrap>
-                        <span>
-                          名称：
-                          <Input
-                            style={{ width: 180 }}
-                            value={selectedMenu.displayName}
-                            onChange={(event) =>
-                              patchMenu(selectedMenu.id, (menu) => ({
-                                ...menu,
-                                displayName: event.target.value,
-                                updatedAt: now()
-                              }))
-                            }
-                          />
-                        </span>
-                        <span>
-                          编码：
-                          <Input
-                            style={{ width: 160 }}
-                            value={selectedMenu.code}
-                            status={CODE_PATTERN.test(selectedMenu.code) ? undefined : 'error'}
-                            onChange={(event) =>
-                              patchMenu(selectedMenu.id, (menu) => ({
-                                ...menu,
-                                code: event.target.value,
-                                updatedAt: now()
-                              }))
-                            }
-                          />
-                        </span>
-                        <span>
-                          排序：
-                          <InputNumber
-                            min={0}
-                            max={999}
-                            value={selectedMenu.sortOrder}
-                            onChange={(value) =>
-                              patchMenu(selectedMenu.id, (menu) => ({
-                                ...menu,
-                                sortOrder: value ?? 0
-                              }))
-                            }
-                          />
-                        </span>
-                        <span>
-                          显示：
-                          <Switch
-                            checked={selectedMenu.visible}
-                            onChange={(visible) =>
-                              patchMenu(selectedMenu.id, (menu) => ({ ...menu, visible }))
-                            }
-                          />
-                        </span>
-                      </Space>
-
-                      <Space size={12} wrap>
-                        <span>
-                          类型：
-                          <Select
-                            style={{ width: 110 }}
-                            value={selectedMenu.menuType}
-                            options={[
-                              { value: 'VIEW', label: '视图' },
-                              { value: 'FORM', label: '表单' }
-                            ]}
-                            onChange={(menuType: MenuType) => {
-                              const target = menuTargets(app, menuType)[0];
-                              patchMenu(selectedMenu.id, (menu) => ({
-                                ...menu,
-                                menuType,
-                                targetId: target?.value ?? ''
-                              }));
-                            }}
-                          />
-                        </span>
-                        <span>
-                          目标：
-                          <Select
-                            style={{ width: 220 }}
-                            value={selectedMenu.targetId || undefined}
-                            options={menuTargets(app, selectedMenu.menuType)}
-                            placeholder="暂无可用目标"
-                            onChange={(targetId) =>
-                              patchMenu(selectedMenu.id, (menu) => ({ ...menu, targetId }))
-                            }
-                          />
-                        </span>
-                      </Space>
-
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        菜单保存并发布后，可在「应用运行」中看到入口。隐藏菜单不会出现在运行端。
-                      </Typography.Text>
-                    </Space>
-                  </Card>
-                ) : (
-                  <Card size="small" style={{ flex: 1, minWidth: 420 }}>
-                    <Empty description="创建或选择一个菜单" />
-                  </Card>
-                )}
-              </div>
-            )
-          }
-        ]}
-      />
     </Space>
   );
 }

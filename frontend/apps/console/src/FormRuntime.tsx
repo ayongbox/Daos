@@ -24,6 +24,7 @@ import {
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
 import { tokens } from '@daos/ui';
 import { ApiError } from '@daos/sdk';
 import type {
@@ -240,6 +241,47 @@ function normalizeValue(component: string, value: unknown): unknown {
     return formattable.toISOString();
   }
   return value;
+}
+
+/** 编辑回填：日期转 picker 值，多选关联把 JSON 字符串还原为数组。 */
+function toControlValue(node: RenderNode, raw: unknown): unknown {
+  if (raw === null || raw === undefined || raw === '') return raw;
+  if (node.component === 'relation' && typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? parsed : raw;
+    } catch {
+      return raw;
+    }
+  }
+  if ((node.component === 'date' || node.component === 'datetime') && raw) {
+    return dayjs(raw as string | number | Date);
+  }
+  return raw;
+}
+
+/** 把记录主表值与子表行转换为 AntD Form 初始值。 */
+function initialValues(nodes: RenderNode[], detail: FormRecordDetail): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const node of mainFieldNodes(nodes)) {
+    if (node.fieldCode && node.fieldCode in detail.record) {
+      values[node.fieldCode] = toControlValue(node, detail.record[node.fieldCode]);
+    }
+  }
+  const subforms: Record<string, Record<string, unknown>[]> = {};
+  for (const node of subformNodes(nodes)) {
+    subforms[node.id] = (detail.subforms[node.id] ?? []).map((row) => {
+      const item: Record<string, unknown> = { ...row };
+      for (const child of node.children) {
+        if (child.fieldCode && child.fieldCode in row) {
+          item[child.fieldCode] = toControlValue(child, row[child.fieldCode]);
+        }
+      }
+      return item;
+    });
+  }
+  values.__subforms = subforms;
+  return values;
 }
 
 function optionsOf(node: RenderNode): Array<{ label: string; value: string }> {
@@ -596,16 +638,23 @@ function renderNode(
 
 export function FormRuntime({
   appId,
-  fixedFormCode
+  fixedFormCode,
+  recordId,
+  embedded = false,
+  onSaved
 }: {
   appId: string;
   fixedFormCode?: string;
+  recordId?: string;
+  embedded?: boolean;
+  onSaved?: () => void;
 }) {
   const { message } = AntApp.useApp();
   const [forms, setForms] = useState<FormSummary[] | null>(null);
   const [formCode, setFormCode] = useState<string | null>(fixedFormCode ?? null);
   const [result, setResult] = useState<FormRenderResult | null>(null);
   const [records, setRecords] = useState<RecordPage | null>(null);
+  const [recordVersion, setRecordVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [runtimeForm] = Form.useForm();
@@ -637,16 +686,32 @@ export function FormRuntime({
     if (!formCode) {
       setResult(null);
       setRecords(null);
+      setRecordVersion(null);
       return;
     }
     let cancelled = false;
     setLoading(true);
     api
-      .renderForm(appId, formCode)
+      .renderForm(appId, formCode, recordId ? 'EDIT' : 'CREATE')
       .then(async (value) => {
         if (cancelled) return;
+        if (recordId) {
+          const detail = await api.formRecord(appId, value.formCode, recordId);
+          if (cancelled) return;
+          runtimeForm.resetFields();
+          setRecordVersion(Number(detail.record.version ?? 0));
+          runtimeForm.setFieldsValue(initialValues(value.tree.nodes, detail));
+          setRecords(null);
+          setResult(value);
+          return;
+        }
         setResult(value);
         runtimeForm.resetFields();
+        setRecordVersion(null);
+        if (embedded) {
+          setRecords(null);
+          return;
+        }
         const page = await api.listRecords(appId, value.tableCode);
         if (!cancelled) setRecords(page);
       })
@@ -659,7 +724,7 @@ export function FormRuntime({
     return () => {
       cancelled = true;
     };
-  }, [appId, formCode]);
+  }, [appId, formCode, recordId, embedded]);
 
   function showError(cause: unknown) {
     if (cause instanceof ApiError && cause.status === 401) return;
@@ -679,7 +744,7 @@ export function FormRuntime({
   );
 
   async function refreshRecords() {
-    if (!result) return;
+    if (!result || recordId || embedded) return;
     try {
       setRecords(await api.listRecords(appId, result.tableCode));
     } catch (cause) {
@@ -725,10 +790,20 @@ export function FormRuntime({
         });
       }
       setSubmitting(true);
-      await api.createFormRecord(appId, result.formCode, { values: payload, subforms });
-      runtimeForm.resetFields();
-      message.success('已提交');
-      await refreshRecords();
+      if (recordId) {
+        await api.updateFormRecord(appId, result.formCode, recordId, recordVersion ?? 0, {
+          values: payload,
+          subforms
+        });
+        message.success('已保存');
+        onSaved?.();
+      } else {
+        await api.createFormRecord(appId, result.formCode, { values: payload, subforms });
+        runtimeForm.resetFields();
+        message.success('已提交');
+        await refreshRecords();
+        onSaved?.();
+      }
     } catch (cause) {
       if (cause instanceof ApiError) {
         showError(cause);
@@ -797,7 +872,7 @@ export function FormRuntime({
     return <Card loading />;
   }
 
-  if (forms.length === 0) {
+  if (forms.length === 0 && !fixedFormCode) {
     return (
       <Card>
         <Empty description="还没有已发布的表单，请先在「表单设计」中创建并发布" />
@@ -807,34 +882,36 @@ export function FormRuntime({
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={16}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 8,
-          padding: '10px 16px',
-          background: tokens.colorBgContainer,
-          borderRadius: tokens.radiusMd
-        }}
-      >
-        <Space size={8}>
-          <Typography.Text strong>{fixedFormCode ? result?.displayName ?? '表单运行' : '表单运行'}</Typography.Text>
-          {fixedFormCode ? null : (
-            <Select
-              style={{ minWidth: 200 }}
-              value={formCode ?? undefined}
-              options={forms.map((item) => ({ value: item.formCode, label: item.displayName }))}
-              onChange={setFormCode}
-            />
-          )}
-          {result ? <Tag style={{ marginInlineEnd: 0 }}>{result.tableCode}</Tag> : null}
-        </Space>
-        <Button onClick={refreshRecords} disabled={!result} loading={loading}>
-          刷新数据
-        </Button>
-      </div>
+      {embedded ? null : (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 8,
+            padding: '10px 16px',
+            background: tokens.colorBgContainer,
+            borderRadius: tokens.radiusMd
+          }}
+        >
+          <Space size={8}>
+            <Typography.Text strong>{fixedFormCode ? result?.displayName ?? '表单运行' : '表单运行'}</Typography.Text>
+            {fixedFormCode ? null : (
+              <Select
+                style={{ minWidth: 200 }}
+                value={formCode ?? undefined}
+                options={forms.map((item) => ({ value: item.formCode, label: item.displayName }))}
+                onChange={setFormCode}
+              />
+            )}
+            {result ? <Tag style={{ marginInlineEnd: 0 }}>{result.tableCode}</Tag> : null}
+          </Space>
+          <Button onClick={refreshRecords} disabled={!result} loading={loading}>
+            刷新数据
+          </Button>
+        </div>
+      )}
 
       <Card size="small" title={result?.displayName ?? '表单'} loading={loading && !result}>
         {result ? (
@@ -847,9 +924,11 @@ export function FormRuntime({
             <Divider style={{ margin: '4px 0 16px' }} />
             <Space>
               <Button type="primary" onClick={submit} loading={submitting}>
-                提交
+                {recordId ? '保存' : '提交'}
               </Button>
-              <Button onClick={() => runtimeForm.resetFields()}>重置</Button>
+              {recordId ? null : (
+                <Button onClick={() => runtimeForm.resetFields()}>重置</Button>
+              )}
             </Space>
           </Form>
         ) : (
@@ -857,40 +936,42 @@ export function FormRuntime({
         )}
       </Card>
 
-      <Card
-        size="small"
-        title={`最近记录${records ? ` · ${records.total}` : ''}`}
-        extra={
-          <Button size="small" type="text" onClick={refreshRecords} disabled={!result}>
-            刷新
-          </Button>
-        }
-      >
-        <Table
-          rowKey="id"
+      {recordId || embedded ? null : (
+        <Card
           size="small"
-          loading={loading}
-          pagination={false}
-          scroll={{ x: 720 }}
-          columns={columns}
-          dataSource={records?.records ?? []}
-          locale={{ emptyText: '还没有记录' }}
-          expandable={
-            subLeaves.length > 0 && result
-              ? {
-                  expandedRowRender: (record: Record<string, unknown>) => (
-                    <RecordDetail
-                      appId={appId}
-                      formCode={result.formCode}
-                      recordId={String(record.id)}
-                      nodes={subLeaves}
-                    />
-                  )
-                }
-              : undefined
+          title={`最近记录${records ? ` · ${records.total}` : ''}`}
+          extra={
+            <Button size="small" type="text" onClick={refreshRecords} disabled={!result}>
+              刷新
+            </Button>
           }
-        />
-      </Card>
+        >
+          <Table
+            rowKey="id"
+            size="small"
+            loading={loading}
+            pagination={false}
+            scroll={{ x: 720 }}
+            columns={columns}
+            dataSource={records?.records ?? []}
+            locale={{ emptyText: '还没有记录' }}
+            expandable={
+              subLeaves.length > 0 && result
+                ? {
+                    expandedRowRender: (record: Record<string, unknown>) => (
+                      <RecordDetail
+                        appId={appId}
+                        formCode={result.formCode}
+                        recordId={String(record.id)}
+                        nodes={subLeaves}
+                      />
+                    )
+                  }
+                : undefined
+            }
+          />
+        </Card>
+      )}
     </Space>
   );
 }
