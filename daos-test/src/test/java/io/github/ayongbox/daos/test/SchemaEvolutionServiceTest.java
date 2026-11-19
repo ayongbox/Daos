@@ -124,6 +124,23 @@ class SchemaEvolutionServiceTest {
     }
 
     @Test
+    void formulaColumnCanBeAddedToExistingTable() {
+        metadataStore.saveDraft(app(1, List.of(titleField())));
+        service.apply(APP_ID, "tester");
+
+        metadataStore.saveDraft(app(2, List.of(titleField(), formulaField())));
+        MigrationPlan plan = service.preview(APP_ID);
+        assertEquals(1, plan.steps().size());
+        assertEquals(MigrationPlan.Operation.ADD_COLUMN, plan.steps().get(0).operation());
+        assertTrue(plan.steps().get(0).forwardSql().contains("numeric(20,2)"));
+
+        MigrationRecord record = service.apply(APP_ID, "tester");
+
+        assertEquals(MigrationStatus.APPLIED, record.status());
+        assertTrue(columnExists("total"));
+    }
+
+    @Test
     void rollbackRequiresLatestMigration() {
         metadataStore.saveDraft(app(1, List.of(titleField())));
         service.apply(APP_ID, "tester");
@@ -190,6 +207,17 @@ class SchemaEvolutionServiceTest {
 
     private static SchemaField ownerField() {
         return field("f-3", "owner");
+    }
+
+    private static SchemaField formulaField() {
+        return new SchemaField(
+                "f-5", APP_ID, "t1", "total", "合计", null,
+                FieldLogicalType.FORMULA,
+                new FieldConfig.FormulaConfig("1 + 1", "decimal", 2, "REALTIME"),
+                FieldConstraints.defaults(),
+                FieldUiHint.empty(),
+                MetadataStatus.PUBLISHED, false, false, 0, null, Map.of(),
+                "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
     }
 
     private static SchemaField attachmentField() {

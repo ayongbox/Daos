@@ -42,12 +42,12 @@ public final class DefaultMigrationCompiler implements MigrationCompiler {
             }
             IrTable source = oldTables.get(target.source().code());
             if (source == null) {
-                addCreateTable(steps, target, dialect);
+                addCreateTable(steps, to, target, dialect);
             } else if (source.source().externalRef() != null) {
                 throw new IllegalArgumentException(
                         "外部引用表不能演进为本地表: " + target.source().code());
             } else {
-                diffTable(steps, source, target, dialect);
+                diffTable(steps, from, source, to, target, dialect);
             }
         }
 
@@ -68,13 +68,14 @@ public final class DefaultMigrationCompiler implements MigrationCompiler {
                 steps);
     }
 
-    private void addCreateTable(List<MigrationStep> steps, IrTable table, SqlDialect dialect) {
+    private void addCreateTable(
+            List<MigrationStep> steps, NormalizedSchema schema, IrTable table, SqlDialect dialect) {
         String physical = table.physicalName();
         steps.add(new MigrationStep(
                 Operation.CREATE_TABLE,
                 table.source().code(),
                 physical,
-                dialect.ddl().createTable(TableDdlFactory.table(table, dialect)).sql(),
+                dialect.ddl().createTable(TableDdlFactory.table(schema, table, dialect)).sql(),
                 dialect.ddl().dropTable(physical).sql()));
 
         for (DdlDialect.IndexDdl index : TableDdlFactory.indexes(table)) {
@@ -83,11 +84,18 @@ public final class DefaultMigrationCompiler implements MigrationCompiler {
     }
 
     private void diffTable(
-            List<MigrationStep> steps, IrTable source, IrTable target, SqlDialect dialect) {
+            List<MigrationStep> steps,
+            NormalizedSchema sourceSchema,
+            IrTable source,
+            NormalizedSchema targetSchema,
+            IrTable target,
+            SqlDialect dialect) {
 
         String physical = target.physicalName();
-        Map<String, DdlDialect.ColumnDdl> oldColumns = byName(TableDdlFactory.columns(source, dialect));
-        Map<String, DdlDialect.ColumnDdl> newColumns = byName(TableDdlFactory.columns(target, dialect));
+        Map<String, DdlDialect.ColumnDdl> oldColumns =
+                byName(TableDdlFactory.columns(sourceSchema, source, dialect));
+        Map<String, DdlDialect.ColumnDdl> newColumns =
+                byName(TableDdlFactory.columns(targetSchema, target, dialect));
 
         Map<String, DdlDialect.IndexDdl> oldIndexes = indexesByName(source, dialect);
         Map<String, DdlDialect.IndexDdl> newIndexes = indexesByName(target, dialect);

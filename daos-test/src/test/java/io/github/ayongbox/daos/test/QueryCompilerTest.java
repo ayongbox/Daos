@@ -53,7 +53,8 @@ class QueryCompilerTest {
         SchemaTable users = table("t1", "users", StorageMode.PHYSICAL, List.of(), List.of(
                 text("t1", "f1", "title", true, true),
                 text("t1", "f2", "memo", false, false),
-                formula("t1", "f3", "total")));
+                formula("t1", "f3", "total"),
+                autoNumber("t1", "f6", "serial")));
         SchemaTable items = table("t2", "items", StorageMode.HYBRID, List.of("amount"), List.of(
                 text("t2", "f4", "amount", true, true),
                 text("t2", "f5", "remark", false, false)));
@@ -112,10 +113,14 @@ class QueryCompilerTest {
     }
 
     @Test
-    void rejectsDerivedAndJsonMemberProjection() {
+    void allowsFormulaProjectionButRejectsDerivedAndJsonMemberProjection() {
+        QueryPlan.Select formula = (QueryPlan.Select) compiler.compile(schema, "t1",
+                new QueryRequest(List.of("total"), null, null, 1, 20), permissions);
+        assertEquals("total", formula.items().get(0).column());
+
         QueryCompileException derived = assertThrows(QueryCompileException.class,
                 () -> compiler.compile(schema, "t1",
-                        new QueryRequest(List.of("total"), null, null, 1, 20), permissions));
+                        new QueryRequest(List.of("serial"), null, null, 1, 20), permissions));
         assertTrue(derived.getMessage().contains("派生字段"));
 
         QueryCompileException jsonMember = assertThrows(QueryCompileException.class,
@@ -210,6 +215,15 @@ class QueryCompilerTest {
         return new SchemaField(id, APP_ID, tableId, code, code, null,
                 FieldLogicalType.FORMULA,
                 new FieldConfig.FormulaConfig("1 + 1", "number", 0, "REALTIME"),
+                FieldConstraints.defaults(), FieldUiHint.empty(),
+                MetadataStatus.PUBLISHED, false, false, 0, null, Map.of(),
+                "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
+    }
+
+    private static SchemaField autoNumber(String tableId, String id, String code) {
+        return new SchemaField(id, APP_ID, tableId, code, code, null,
+                FieldLogicalType.AUTO_NUMBER,
+                new FieldConfig.AutoNumberConfig("PO", "yyyyMMdd", 4, "never", 1L, null),
                 FieldConstraints.defaults(), FieldUiHint.empty(),
                 MetadataStatus.PUBLISHED, false, false, 0, null, Map.of(),
                 "system", TIMESTAMP, "system", TIMESTAMP, false, 1);

@@ -1,5 +1,11 @@
 import { createApiClient } from '@daos/sdk';
-import type { FieldConfig, FieldLogicalType, FormComponent, SchemaApp } from '@daos/metadata';
+import type {
+  FieldConfig,
+  FieldLogicalType,
+  FormComponent,
+  LinkageRule,
+  SchemaApp
+} from '@daos/metadata';
 
 const TOKEN_KEY = 'daos.token';
 
@@ -106,6 +112,9 @@ export interface RenderTree {
   scene: 'CREATE' | 'EDIT' | 'VIEW';
   schemaVersion: number;
   nodes: RenderNode[];
+  props: {
+    linkages?: LinkageRule[];
+  };
 }
 
 export interface FormRenderResult {

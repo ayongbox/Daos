@@ -9,6 +9,7 @@ import {
   Divider,
   Empty,
   Form,
+  type FormInstance,
   Input,
   InputNumber,
   Popconfirm,
@@ -25,6 +26,13 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { tokens } from '@daos/ui';
 import { ApiError } from '@daos/sdk';
+import type {
+  FormScene,
+  LinkageAction,
+  LinkageCondition,
+  LinkageRule,
+  ValueType
+} from '@daos/metadata';
 import {
   api,
   type FormRecordDetail,
@@ -48,6 +56,160 @@ const READONLY_COMPONENTS = new Set([
 
 function isReadonly(node: RenderNode): boolean {
   return node.readonly || READONLY_COMPONENTS.has(node.component);
+}
+
+interface LinkageFieldState {
+  hidden: boolean;
+  required: boolean;
+  readonly: boolean;
+}
+
+interface LinkageAssignment {
+  fieldCode: string;
+  value: unknown;
+}
+
+const SUPPORTED_CONDITIONS = new Set(['eq', 'ne', 'empty', 'not_empty', 'gt', 'lt']);
+
+function emptyValue(value: unknown): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    (typeof value === 'string' && value.trim() === '') ||
+    (Array.isArray(value) && value.length === 0)
+  );
+}
+
+function coerceValue(value: unknown, valueType: ValueType): unknown {
+  if (value === null || value === undefined) return value;
+  if (valueType === 'NUMBER') return Number(value);
+  if (valueType === 'BOOLEAN') return value === true || value === 'true';
+  return value;
+}
+
+function compareOrdered(left: unknown, right: unknown): number {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (!emptyValue(left) && !emptyValue(right) && Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return leftNumber - rightNumber;
+  }
+  return String(left ?? '').localeCompare(String(right ?? ''));
+}
+
+function conditionMatches(condition: LinkageCondition, values: Record<string, unknown>): boolean {
+  const valueType = condition.valueType ?? 'ANY';
+  const left = coerceValue(values[condition.fieldId], valueType);
+  const right = coerceValue(
+    condition.valueFieldId ? values[condition.valueFieldId] : condition.value,
+    valueType
+  );
+  switch (condition.operator) {
+    case 'eq':
+      return left === right;
+    case 'ne':
+      return left !== right;
+    case 'empty':
+      return emptyValue(left);
+    case 'not_empty':
+      return !emptyValue(left);
+    case 'gt':
+      return compareOrdered(left, right) > 0;
+    case 'lt':
+      return compareOrdered(left, right) < 0;
+    default:
+      return false;
+  }
+}
+
+function actionTargetIds(action: LinkageAction): string[] {
+  return [...new Set([...(action.fieldId ? [action.fieldId] : []), ...action.targetFieldIds])];
+}
+
+/** 计算联动状态并应用赋值动作；只读和必填动作只能恢复后端基线，不能放宽权限。 */
+function useLinkage(
+  form: FormInstance,
+  nodes: RenderNode[],
+  formValues: Record<string, unknown>,
+  linkages: LinkageRule[],
+  scene: FormScene
+): Record<string, LinkageFieldState> {
+  const fields = useMemo(() => {
+    const result = new Map<string, RenderNode>();
+    for (const node of nodes) {
+      if (typeof node.props.fieldId === 'string') result.set(node.props.fieldId, node);
+    }
+    return result;
+  }, [nodes]);
+
+  const evaluation = useMemo(() => {
+    const values: Record<string, unknown> = {};
+    const states: Record<string, LinkageFieldState> = {};
+    for (const node of nodes) {
+      states[node.id] = {
+        hidden: node.hidden,
+        required: node.required,
+        readonly: isReadonly(node)
+      };
+    }
+    for (const [fieldId, node] of fields) {
+      if (node.fieldCode) values[fieldId] = formValues[node.fieldCode];
+    }
+
+    const assignments: LinkageAssignment[] = [];
+    const orderedRules = [...linkages].sort((left, right) => left.priority - right.priority);
+    for (const rule of orderedRules) {
+      if (!rule.enabled || (rule.scenes.length > 0 && !rule.scenes.includes(scene))) continue;
+      if (rule.when.some((condition) => !SUPPORTED_CONDITIONS.has(condition.operator))) continue;
+      const matches =
+        rule.logic === 'OR'
+          ? rule.when.some((condition) => conditionMatches(condition, values))
+          : rule.when.every((condition) => conditionMatches(condition, values));
+      for (const action of matches ? rule.then : rule.otherwise) {
+        for (const targetId of actionTargetIds(action)) {
+          const node = fields.get(targetId);
+          if (!node?.fieldCode) continue;
+          const state = states[node.id];
+          if (!state) continue;
+          switch (action.action) {
+            case 'show':
+              state.hidden = node.hidden;
+              break;
+            case 'hide':
+              state.hidden = true;
+              break;
+            case 'require':
+              state.required = true;
+              break;
+            case 'optional':
+              state.required = node.required;
+              break;
+            case 'readonly':
+              state.readonly = true;
+              break;
+            case 'editable':
+              state.readonly = isReadonly(node);
+              break;
+            case 'set_value':
+              assignments.push({ fieldCode: node.fieldCode, value: action.value });
+              break;
+            case 'clear_value':
+              assignments.push({ fieldCode: node.fieldCode, value: undefined });
+              break;
+          }
+        }
+      }
+    }
+    return { states, assignments };
+  }, [fields, nodes, formValues, linkages, scene]);
+
+  useEffect(() => {
+    for (const assignment of evaluation.assignments) {
+      if (Object.is(form.getFieldValue(assignment.fieldCode), assignment.value)) continue;
+      form.setFieldValue(assignment.fieldCode, assignment.value);
+    }
+  }, [form, evaluation]);
+
+  return evaluation.states;
 }
 
 function mainFieldNodes(nodes: RenderNode[]): RenderNode[] {
@@ -93,12 +255,14 @@ function RelationSelect({
   appId,
   tableCode,
   node,
+  readonly,
   value,
   onChange
 }: {
   appId: string;
   tableCode: string;
   node: RenderNode;
+  readonly: boolean;
   value?: unknown;
   onChange?: (value: unknown) => void;
 }) {
@@ -134,7 +298,7 @@ function RelationSelect({
       showSearch
       filterOption={false}
       loading={loading}
-      disabled={isReadonly(node)}
+      disabled={readonly}
       placeholder={placeholder}
       options={options}
       value={value as string | string[] | undefined}
@@ -147,8 +311,13 @@ function RelationSelect({
   );
 }
 
-function control(node: RenderNode, appId: string, tableCode: string) {
-  const disabled = isReadonly(node);
+function control(
+  node: RenderNode,
+  appId: string,
+  tableCode: string,
+  readonly = isReadonly(node)
+) {
+  const disabled = readonly;
   const placeholder = typeof node.props.placeholder === 'string' ? node.props.placeholder : undefined;
   const options = optionsOf(node);
 
@@ -190,7 +359,7 @@ function control(node: RenderNode, appId: string, tableCode: string) {
     case 'rating':
       return <Rate disabled={disabled} />;
     case 'relation':
-      return <RelationSelect appId={appId} tableCode={tableCode} node={node} />;
+      return <RelationSelect appId={appId} tableCode={tableCode} node={node} readonly={readonly} />;
     default:
       return <Input disabled={disabled} placeholder={placeholder} />;
   }
@@ -354,7 +523,12 @@ function RecordDetail({
   );
 }
 
-function renderNode(node: RenderNode, appId: string, tableCode: string): ReactNode {
+function renderNode(
+  node: RenderNode,
+  appId: string,
+  tableCode: string,
+  linkageStates: Record<string, LinkageFieldState>
+): ReactNode {
   if (node.component === 'divider') {
     return <Divider key={node.id} style={{ margin: '8px 0' }} />;
   }
@@ -389,12 +563,19 @@ function renderNode(node: RenderNode, appId: string, tableCode: string): ReactNo
           </Typography.Text>
         ) : null}
         <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-          {node.children.map((child) => renderNode(child, appId, tableCode))}
+          {node.children.map((child) => renderNode(child, appId, tableCode, linkageStates))}
         </div>
       </div>
     );
   }
   if (!node.fieldCode) return null;
+  const state = linkageStates[node.id] ?? {
+    hidden: node.hidden,
+    required: node.required,
+    readonly: isReadonly(node)
+  };
+  if (state.hidden) return null;
+  const label = node.label ?? node.fieldCode;
   return (
     <div
       key={node.id}
@@ -402,11 +583,12 @@ function renderNode(node: RenderNode, appId: string, tableCode: string): ReactNo
     >
       <Form.Item
         name={node.fieldCode}
-        label={node.label ?? node.fieldCode}
-        required={node.required}
+        label={label}
+        required={state.required}
+        rules={state.required ? [{ required: true, message: `请填写${label}` }] : undefined}
         style={{ marginBottom: 16 }}
       >
-        {control(node, appId, tableCode)}
+        {control(node, appId, tableCode, state.readonly)}
       </Form.Item>
     </div>
   );
@@ -486,6 +668,15 @@ export function FormRuntime({
 
   const leaves = useMemo(() => (result ? mainFieldNodes(result.tree.nodes) : []), [result]);
   const subLeaves = useMemo(() => (result ? subformNodes(result.tree.nodes) : []), [result]);
+  const formValues = (Form.useWatch([], runtimeForm) ?? {}) as Record<string, unknown>;
+  const linkages = result?.tree.props?.linkages ?? [];
+  const linkageStates = useLinkage(
+    runtimeForm,
+    leaves,
+    formValues,
+    linkages,
+    result?.tree.scene ?? 'CREATE'
+  );
 
   async function refreshRecords() {
     if (!result) return;
@@ -502,7 +693,9 @@ export function FormRuntime({
       const values = (await runtimeForm.validateFields()) as Record<string, unknown>;
       const payload: Record<string, unknown> = {};
       for (const node of leaves) {
-        if (!node.fieldCode || isReadonly(node)) continue;
+        if (!node.fieldCode) continue;
+        const state = linkageStates[node.id];
+        if (state?.hidden || (state?.readonly ?? isReadonly(node))) continue;
         if (!(node.fieldCode in values)) continue;
         const normalized = normalizeValue(node.component, values[node.fieldCode]);
         payload[node.fieldCode] =
@@ -647,7 +840,9 @@ export function FormRuntime({
         {result ? (
           <Form form={runtimeForm} layout="vertical" requiredMark>
             <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-              {result.tree.nodes.map((node) => renderNode(node, appId, result.tableCode))}
+              {result.tree.nodes.map((node) =>
+                renderNode(node, appId, result.tableCode, linkageStates)
+              )}
             </div>
             <Divider style={{ margin: '4px 0 16px' }} />
             <Space>

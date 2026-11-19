@@ -9,6 +9,7 @@ import {
   Empty,
   Form,
   Input,
+  InputNumber,
   Layout,
   List,
   Modal,
@@ -29,9 +30,12 @@ import { FIELD_TYPE_LABELS } from '@daos/metadata';
 import type {
   FieldConfig,
   FieldLogicalType,
+  FormulaConfig,
   IndexDef,
+  RelationConfig,
   RelationDef,
   RelationType,
+  RollupConfig,
   SchemaApp,
   SchemaField,
   SchemaTable
@@ -210,6 +214,13 @@ interface FieldFormValues {
   unique: boolean;
   placeholder?: string;
   helpText?: string;
+  expression?: string;
+  resultType?: FormulaConfig['resultType'];
+  relationFieldId?: string;
+  sourceFieldId?: string;
+  aggregate?: RollupConfig['aggregate'];
+  precision?: number;
+  emptyAsZero?: boolean;
 }
 
 interface IndexFormValues {
@@ -250,10 +261,29 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
   const [appForm] = Form.useForm<{ displayName: string; description?: string; icon?: string }>();
   const [tableForm] = Form.useForm<{ code: string; displayName: string }>();
   const [fieldForm] = Form.useForm<FieldFormValues>();
+  const selectedLogicalType = Form.useWatch('logicalType', fieldForm);
+  const selectedRelationFieldId = Form.useWatch('relationFieldId', fieldForm);
+  const selectedAggregate = Form.useWatch('aggregate', fieldForm);
   const [indexForm] = Form.useForm<IndexFormValues>();
   const [relationForm] = Form.useForm<RelationFormValues>();
 
   const selectedTable = draft?.tables.find((table) => table.id === selectedTableId) ?? null;
+  const rollupRelations = (draft?.tables ?? []).flatMap((table) =>
+    table.id === selectedTable?.id
+      ? []
+      : table.fields
+          .filter(
+            (field) =>
+              !field.deleted &&
+              field.logicalType === 'relation' &&
+              (field.config as RelationConfig).targetTableId === selectedTable?.id
+          )
+          .map((field) => ({ table, field }))
+  );
+  const selectedRollupRelation = rollupRelations.find(
+    ({ field }) => field.id === selectedRelationFieldId
+  );
+  const rollupSourceFields = selectedRollupRelation?.table.fields.filter((field) => !field.deleted) ?? [];
   const editingField =
     fieldModal?.fieldId && selectedTable
       ? selectedTable.fields.find((field) => field.id === fieldModal.fieldId) ?? null
@@ -314,6 +344,8 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
 
   function openFieldEditor(field: SchemaField) {
     if (!selectedTable) return;
+    const formula = field.logicalType === 'formula' ? (field.config as FormulaConfig) : null;
+    const rollup = field.logicalType === 'rollup' ? (field.config as RollupConfig) : null;
     setFieldModal({ tableId: selectedTable.id, fieldId: field.id });
     fieldForm.setFieldsValue({
       code: field.code,
@@ -322,7 +354,14 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
       required: field.constraints.required,
       unique: field.constraints.unique,
       placeholder: field.ui.placeholder ?? undefined,
-      helpText: field.ui.helpText ?? undefined
+      helpText: field.ui.helpText ?? undefined,
+      expression: formula?.expression ?? undefined,
+      resultType: formula?.resultType ?? undefined,
+      relationFieldId: rollup?.relationFieldId ?? undefined,
+      sourceFieldId: rollup?.sourceFieldId ?? undefined,
+      aggregate: rollup ? (rollup.aggregate ?? 'SUM') : undefined,
+      precision: formula?.precision ?? (rollup ? (rollup.precision ?? 2) : undefined),
+      emptyAsZero: rollup ? (rollup.emptyAsZero ?? true) : undefined
     });
   }
 
@@ -477,6 +516,24 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
       message.error('字段类型未加载');
       return;
     }
+    const config: FieldConfig =
+      values.logicalType === 'formula'
+        ? {
+            expression: values.expression?.trim() ?? '',
+            resultType: values.resultType ?? 'decimal',
+            precision: values.precision ?? 2,
+            cacheMode: 'REALTIME'
+          }
+        : values.logicalType === 'rollup'
+          ? {
+              relationFieldId: values.relationFieldId ?? '',
+              sourceFieldId: values.sourceFieldId ?? null,
+              aggregate: values.aggregate ?? 'SUM',
+              filterExpression: null,
+              precision: values.precision ?? 2,
+              emptyAsZero: values.emptyAsZero ?? true
+            }
+          : template.defaultConfig;
     if (fieldModal.fieldId) {
       patchTable(selectedTable.id, (table) => ({
         ...table,
@@ -487,7 +544,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                 code: values.code,
                 displayName: values.displayName,
                 logicalType: values.logicalType,
-                config: template.defaultConfig,
+                config,
                 constraints: {
                   ...field.constraints,
                   required: values.required,
@@ -511,7 +568,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         values.code,
         values.displayName,
         values.logicalType,
-        template.defaultConfig
+        config
       );
       field.constraints.required = values.required;
       field.constraints.unique = values.unique;
@@ -1321,8 +1378,131 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                 value: item.logicalType,
                 label: FIELD_TYPE_LABELS[item.logicalType] ?? item.logicalType
               }))}
+              onChange={(logicalType) => {
+                if (logicalType === 'formula') {
+                  fieldForm.setFieldsValue({ resultType: 'decimal', precision: 2 });
+                } else if (logicalType === 'rollup') {
+                  fieldForm.setFieldsValue({
+                    relationFieldId: undefined,
+                    sourceFieldId: undefined,
+                    aggregate: 'SUM',
+                    precision: 2,
+                    emptyAsZero: true
+                  });
+                }
+              }}
             />
           </Form.Item>
+
+          {selectedLogicalType === 'formula' ? (
+            <>
+              <Divider style={{ margin: '8px 0 16px' }} />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                公式配置
+              </Typography.Text>
+              <Form.Item
+                name="expression"
+                label="公式表达式"
+                extra="使用 {字段编码} 引用同表字段，支持 +、-、*、/、括号和 ROUND"
+                style={{ marginTop: 8 }}
+                rules={[{ required: true, message: '请输入公式表达式' }]}
+              >
+                <Input.TextArea rows={3} placeholder="{quantity} * {unit_price}" />
+              </Form.Item>
+              <Form.Item
+                name="resultType"
+                label="结果类型"
+                rules={[{ required: true, message: '请选择结果类型' }]}
+              >
+                <Select
+                  options={[
+                    { value: 'number', label: '整数' },
+                    { value: 'decimal', label: '小数' },
+                    { value: 'text', label: '文本' },
+                    { value: 'date', label: '日期' },
+                    { value: 'boolean', label: '是 / 否' }
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item
+                name="precision"
+                label="小数位数"
+                rules={[{ required: true, message: '请设置小数位数' }]}
+              >
+                <InputNumber min={0} max={20} precision={0} style={{ width: '100%' }} />
+              </Form.Item>
+            </>
+          ) : null}
+
+          {selectedLogicalType === 'rollup' ? (
+            <>
+              <Divider style={{ margin: '8px 0 16px' }} />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                引用汇总配置
+              </Typography.Text>
+              <Form.Item
+                name="relationFieldId"
+                label="关联字段"
+                extra="仅显示其他表中关联到当前表的字段"
+                style={{ marginTop: 8 }}
+                rules={[{ required: true, message: '请选择关联字段' }]}
+              >
+                <Select
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder="请选择子表关联字段"
+                  options={rollupRelations.map(({ table, field }) => ({
+                    value: field.id,
+                    label: `${table.displayName} / ${field.displayName}`
+                  }))}
+                  onChange={() => fieldForm.setFieldsValue({ sourceFieldId: undefined })}
+                />
+              </Form.Item>
+              <Form.Item
+                name="sourceFieldId"
+                label="来源字段"
+                extra={selectedAggregate === 'COUNT' ? 'COUNT 时可不选择来源字段' : undefined}
+                dependencies={['aggregate']}
+                rules={[{ required: selectedAggregate !== 'COUNT', message: '请选择来源字段' }]}
+              >
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  disabled={!selectedRollupRelation}
+                  options={rollupSourceFields.map((field) => ({
+                    value: field.id,
+                    label: `${field.displayName} (${field.code})`
+                  }))}
+                />
+              </Form.Item>
+              <Form.Item
+                name="aggregate"
+                label="聚合方式"
+                rules={[{ required: true, message: '请选择聚合方式' }]}
+              >
+                <Select
+                  options={[
+                    { value: 'SUM', label: 'SUM（求和）' },
+                    { value: 'AVG', label: 'AVG（平均值）' },
+                    { value: 'COUNT', label: 'COUNT（计数）' },
+                    { value: 'MAX', label: 'MAX（最大值）' },
+                    { value: 'MIN', label: 'MIN（最小值）' }
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item
+                name="precision"
+                label="小数位数"
+                rules={[{ required: true, message: '请设置小数位数' }]}
+              >
+                <InputNumber min={0} max={20} precision={0} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item name="emptyAsZero" label="空集显示为 0" valuePropName="checked">
+                <Switch size="small" />
+              </Form.Item>
+            </>
+          ) : null}
 
           <Divider style={{ margin: '8px 0 16px' }} />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>

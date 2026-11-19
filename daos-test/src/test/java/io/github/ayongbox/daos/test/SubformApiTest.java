@@ -107,7 +107,7 @@ class SubformApiTest {
                         + "\"updated_by\" varchar(36), \"updated_at\" timestamp, "
                         + "\"version\" bigint NOT NULL DEFAULT 0, "
                         + "\"deleted\" boolean NOT NULL DEFAULT FALSE, "
-                        + "\"title\" varchar(255))"));
+                        + "\"title\" varchar(255), \"total_qty\" decimal(20,2))"));
         dataAccess.update(SqlStatement.of(
                 "CREATE TABLE \"app_demo_order_items\" ("
                         + "\"id\" varchar(26) PRIMARY KEY, \"tenant_id\" varchar(36) NOT NULL, "
@@ -115,7 +115,7 @@ class SubformApiTest {
                         + "\"updated_by\" varchar(36), \"updated_at\" timestamp, "
                         + "\"version\" bigint NOT NULL DEFAULT 0, "
                         + "\"deleted\" boolean NOT NULL DEFAULT FALSE, "
-                        + "\"sku\" varchar(255), \"qty\" varchar(255), "
+                        + "\"sku\" varchar(255), \"qty\" decimal(20,2), "
                         + "\"order_ref\" varchar(26))"));
 
         metadataStore = new InMemoryMetadataStore();
@@ -164,6 +164,7 @@ class SubformApiTest {
         mvc.perform(get(BASE + "/" + id).requestAttr(attr(), session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.record.title").value("订单A"))
+                .andExpect(jsonPath("$.data.record.total_qty").value(3.0))
                 .andExpect(jsonPath("$.data.subforms['sf-1'].length()").value(2));
     }
 
@@ -188,6 +189,7 @@ class SubformApiTest {
 
         JsonNode updated = getDetail(id);
         assertEquals("订单B", updated.at("/data/record/title").asText());
+        assertEquals(7.0, updated.at("/data/record/total_qty").asDouble());
         JsonNode rows = updated.at("/data/subforms/sf-1");
         assertEquals(2, rows.size());
         Set<String> skus = new HashSet<>();
@@ -196,10 +198,67 @@ class SubformApiTest {
     }
 
     @Test
+    void deletingSubformRowRecalculatesRollup() throws Exception {
+        String id = createOrder("订单A");
+        JsonNode detail = getDetail(id);
+        JsonNode first = detail.at("/data/subforms/sf-1/0");
+        Map<String, Object> body = Map.of(
+                "values", Map.of(),
+                "subforms", Map.of("sf-1", List.of(Map.of(
+                        "id", first.get("id").asText(),
+                        "version", first.get("version").asLong(),
+                        "sku", "A",
+                        "qty", "1"))));
+
+        mvc.perform(put(BASE + "/" + id)
+                        .param("version", detail.at("/data/record/version").asText())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body))
+                        .requestAttr(attr(), session))
+                .andExpect(status().isOk());
+
+        JsonNode updated = getDetail(id);
+        assertEquals(1.0, updated.at("/data/record/total_qty").asDouble());
+        assertEquals(1, updated.at("/data/subforms/sf-1").size());
+    }
+
+    @Test
+    void missingMasterUpdatePermissionRollsBackChildAndRollup() throws Exception {
+        String id = createOrder("订单A");
+        publish(true, false);
+        JsonNode detail = getDetail(id);
+        List<Map<String, Object>> submitted = new java.util.ArrayList<>();
+        for (JsonNode row : detail.at("/data/subforms/sf-1")) {
+            submitted.add(Map.of(
+                    "id", row.get("id").asText(),
+                    "version", row.get("version").asLong(),
+                    "sku", row.get("sku").asText(),
+                    "qty", "A".equals(row.get("sku").asText()) ? "9" : row.get("qty").asText()));
+        }
+        Map<String, Object> body = Map.of(
+                "values", Map.of(), "subforms", Map.of("sf-1", submitted));
+
+        mvc.perform(put(BASE + "/" + id)
+                        .param("version", detail.at("/data/record/version").asText())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body))
+                        .requestAttr(attr(), session))
+                .andExpect(status().isForbidden());
+
+        JsonNode unchanged = getDetail(id);
+        assertEquals(3.0, unchanged.at("/data/record/total_qty").asDouble());
+        Set<Double> quantities = new HashSet<>();
+        unchanged.at("/data/subforms/sf-1").forEach(row -> quantities.add(row.get("qty").asDouble()));
+        assertEquals(Set.of(1.0, 2.0), quantities);
+    }
+
+    @Test
     void deleteCascadesSubformRows() throws Exception {
         String id = createOrder("订单A");
 
-        mvc.perform(delete(BASE + "/" + id).param("version", "0").requestAttr(attr(), session))
+        long version = getDetail(id).at("/data/record/version").asLong();
+        mvc.perform(delete(BASE + "/" + id).param("version", String.valueOf(version))
+                        .requestAttr(attr(), session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.affected").value(1));
 
@@ -271,27 +330,37 @@ class SubformApiTest {
     }
 
     private void publish(boolean childCreatable) {
-        metadataStore.saveDraft(app(childCreatable));
+        publish(childCreatable, true);
+    }
+
+    private void publish(boolean childCreatable, boolean parentUpdatable) {
+        metadataStore.saveDraft(app(childCreatable, parentUpdatable));
         new PublishService(metadataStore, snapshotStore).publish(APP_ID, "tester");
     }
 
-    private static SchemaApp app(boolean childCreatable) {
+    private static SchemaApp app(boolean childCreatable, boolean parentUpdatable) {
         SchemaField title = field("f-1", "t1", "title", FieldLogicalType.TEXT_SHORT,
                 new FieldConfig.TextShortConfig(255, 0, null, null, false));
+        SchemaField totalQty = field("f-total", "t1", "total_qty", FieldLogicalType.ROLLUP,
+                new FieldConfig.RollupConfig("f-5", "f-4", "sum", null, 2, true));
         SchemaField sku = field("f-3", "t2", "sku", FieldLogicalType.TEXT_SHORT,
                 new FieldConfig.TextShortConfig(255, 0, null, null, false));
-        SchemaField qty = field("f-4", "t2", "qty", FieldLogicalType.TEXT_SHORT,
-                new FieldConfig.TextShortConfig(255, 0, null, null, false));
+        SchemaField qty = field("f-4", "t2", "qty", FieldLogicalType.DECIMAL,
+                new FieldConfig.DecimalConfig(20, 2, null, null, null, null, null, false));
         SchemaField orderRef = field("f-5", "t2", "order_ref", FieldLogicalType.RELATION,
                 new FieldConfig.RelationConfig(
                         "t1", null, false, 0, null, null, false, null, null));
 
-        SchemaTable orders = table("t1", "orders", "订单", List.of(title));
+        SchemaTable orders = table("t1", "orders", "订单", List.of(title, totalQty));
         SchemaTable items = table("t2", "order_items", "订单明细", List.of(sku, qty, orderRef));
 
         List<SchemaPermission> permissions = new java.util.ArrayList<>();
-        permissions.add(permission("p-1", "orders", List.of(
-                ActionType.READ, ActionType.CREATE, ActionType.UPDATE, ActionType.DELETE)));
+        List<ActionType> parentActions = new java.util.ArrayList<>(List.of(
+                ActionType.READ, ActionType.CREATE, ActionType.DELETE));
+        if (parentUpdatable) {
+            parentActions.add(ActionType.UPDATE);
+        }
+        permissions.add(permission("p-1", "orders", parentActions));
         if (childCreatable) {
             permissions.add(permission("p-2", "order_items", List.of(
                     ActionType.READ, ActionType.CREATE, ActionType.UPDATE, ActionType.DELETE)));
@@ -305,6 +374,7 @@ class SubformApiTest {
 
     private static SchemaForm form() {
         FormField title = input("n-1", "f-1", "标题", 24, 0);
+        FormField totalQty = input("n-total", "f-total", "数量合计", 24, 1);
         FormField subform = new FormField(
                 "sf-1", null, FormComponent.SUBFORM, "明细", 24, 0, 1, null, null, null,
                 false, false, false, null, null, Map.of(), Map.of(), List.of(),
@@ -314,7 +384,7 @@ class SubformApiTest {
                 null, null, false, false, 2);
         return new SchemaForm(
                 "form-1", APP_ID, "t1", "basic", "订单表单", null, FormType.RECORD, Map.of(),
-                List.of(title, subform), List.of(), List.of(), List.of(),
+                List.of(title, totalQty, subform), List.of(), List.of(), List.of(),
                 MetadataStatus.DRAFT, 1, Map.of(),
                 "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
     }

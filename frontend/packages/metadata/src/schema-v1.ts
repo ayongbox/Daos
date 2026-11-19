@@ -141,7 +141,7 @@ export interface DepartmentConfig { multi: boolean; scopeDeptIds: string[]; incl
 export interface DepartmentMultiConfig { scopeDeptIds: string[]; includeSubDept: boolean; displayStyle: string; maxSelected: number }
 export interface AttachmentConfig { maxCount: number; maxSizeMb: number; accept: string[]; storage: string; imageOnly: boolean; compressImage: boolean; privateAccess: boolean; allowCamera: boolean }
 export interface RelationConfig { targetTableId: Ulid; displayFieldId: Ulid; multiple: boolean; maxSelected: number; filterExpression?: string | null; onDelete: OnDeleteAction; quickCreate: boolean; showAs: string; bidirectionalFieldId?: string | null }
-export interface RollupConfig { relationFieldId: Ulid; sourceFieldId: Ulid; aggregate: string; filterExpression?: string | null; precision: number; emptyAsZero: boolean }
+export interface RollupConfig { relationFieldId: Ulid; sourceFieldId: Ulid | null; aggregate: string; filterExpression?: string | null; precision: number; emptyAsZero: boolean }
 export interface FormulaConfig { expression: string; resultType: string; precision: number; cacheMode: string }
 export interface AutoNumberConfig { prefix: string; datePattern: string; serialLength: number; resetCycle: string; startValue: number; suffix?: string | null }
 export interface RatingConfig { max: number; allowHalf: boolean; icon: string }

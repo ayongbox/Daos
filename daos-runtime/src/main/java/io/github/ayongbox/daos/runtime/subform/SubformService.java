@@ -279,7 +279,7 @@ public final class SubformService {
             if (id == null) {
                 continue;
             }
-            writeService.delete(
+            writeService.deleteWithoutRollup(
                     appId, definition.childTable().tableId(), String.valueOf(id),
                     versionOf(row), permissions);
         }

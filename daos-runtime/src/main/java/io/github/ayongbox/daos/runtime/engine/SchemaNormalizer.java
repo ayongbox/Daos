@@ -4,6 +4,7 @@ import io.github.ayongbox.daos.core.ir.IrColumn;
 import io.github.ayongbox.daos.core.ir.IrForm;
 import io.github.ayongbox.daos.core.ir.IrTable;
 import io.github.ayongbox.daos.core.ir.NormalizedSchema;
+import io.github.ayongbox.daos.core.metadata.common.FieldLogicalType;
 import io.github.ayongbox.daos.core.metadata.field.FieldConfig;
 import io.github.ayongbox.daos.core.metadata.field.SchemaField;
 import io.github.ayongbox.daos.core.metadata.form.FormField;
@@ -162,8 +163,14 @@ public final class SchemaNormalizer {
     }
 
     private IrColumn.Storage storageOf(SchemaField field, SchemaTable table) {
-        if (field.logicalType().computed()) {
+        // auto_number 在运行期生成，不落物理列；formula/rollup 写入时计算落库，
+        // 始终使用物理列以保证大表查询性能（验收基线：100 万行列表 P95 ≤500ms）。
+        if (field.logicalType() == FieldLogicalType.AUTO_NUMBER) {
             return IrColumn.Storage.DERIVED;
+        }
+        if (field.logicalType() == FieldLogicalType.FORMULA
+                || field.logicalType() == FieldLogicalType.ROLLUP) {
+            return IrColumn.Storage.COLUMN;
         }
         return switch (table.storageMode()) {
             case PHYSICAL -> IrColumn.Storage.COLUMN;

@@ -13,12 +13,14 @@ public record RenderTree(
         String formId,
         FormScene scene,
         int schemaVersion,
-        List<RenderNode> nodes) {
+        List<RenderNode> nodes,
+        Map<String, Object> props) {
 
     public RenderTree {
         Objects.requireNonNull(formId, "formId");
         scene = scene == null ? FormScene.VIEW : scene;
         nodes = nodes == null ? List.of() : List.copyOf(nodes);
+        props = props == null ? Map.of() : Map.copyOf(props);
     }
 
     public boolean isEmpty() {

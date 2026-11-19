@@ -2,6 +2,7 @@ package io.github.ayongbox.daos.runtime.engine.ddl;
 
 import io.github.ayongbox.daos.core.ir.IrColumn;
 import io.github.ayongbox.daos.core.ir.IrTable;
+import io.github.ayongbox.daos.core.ir.NormalizedSchema;
 import io.github.ayongbox.daos.core.metadata.common.IndexType;
 import io.github.ayongbox.daos.core.metadata.common.StorageMode;
 import io.github.ayongbox.daos.core.metadata.field.FieldConstraints;
@@ -45,13 +46,23 @@ public final class TableDdlFactory {
     }
 
     public static DdlDialect.TableDdl table(IrTable table, SqlDialect dialect) {
-        return new DdlDialect.TableDdl(table.physicalName(), columns(table, dialect));
+        return table(null, table, dialect);
+    }
+
+    public static DdlDialect.TableDdl table(
+            NormalizedSchema schema, IrTable table, SqlDialect dialect) {
+        return new DdlDialect.TableDdl(table.physicalName(), columns(schema, table, dialect));
     }
 
     public static List<DdlDialect.ColumnDdl> columns(IrTable table, SqlDialect dialect) {
+        return columns(null, table, dialect);
+    }
+
+    public static List<DdlDialect.ColumnDdl> columns(
+            NormalizedSchema schema, IrTable table, SqlDialect dialect) {
         List<DdlDialect.ColumnDdl> columns = new ArrayList<>();
         appendAutoColumns(columns, table.source(), dialect);
-        appendBusinessColumns(columns, table, dialect);
+        appendBusinessColumns(columns, schema, table, dialect);
         appendExtColumn(columns, table, dialect);
         return columns;
     }
@@ -138,7 +149,10 @@ public final class TableDdlFactory {
     }
 
     private static void appendBusinessColumns(
-            List<DdlDialect.ColumnDdl> columns, IrTable table, SqlDialect dialect) {
+            List<DdlDialect.ColumnDdl> columns,
+            NormalizedSchema schema,
+            IrTable table,
+            SqlDialect dialect) {
 
         for (IrColumn column : table.columns()) {
             if (!column.hasPhysicalColumn()) {
@@ -152,7 +166,7 @@ public final class TableDdlFactory {
             FieldConstraints constraints = field.constraints();
             columns.add(new DdlDialect.ColumnDdl(
                     physicalName,
-                    dialect.types().sqlType(field),
+                    dialect.types().sqlType(field, table, schema),
                     !constraints.required(),
                     defaultValue(field, dialect),
                     false));

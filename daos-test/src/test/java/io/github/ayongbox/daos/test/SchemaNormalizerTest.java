@@ -55,14 +55,14 @@ class SchemaNormalizerTest {
     }
 
     @Test
-    void marksComputedFieldsAsDerived() {
+    void marksFormulaAsPhysicalColumn() {
         SchemaTable orders = table("t1", "orders",
                 List.of(text("t1", "f1", "amount"), formula("t1", "f2", "total", "{amount} * 2")),
                 List.of());
 
         NormalizedSchema schema = normalizer.normalize("demo", "snap-1", 1L, List.of(orders));
 
-        assertEquals(IrColumn.Storage.DERIVED,
+        assertEquals(IrColumn.Storage.COLUMN,
                 schema.requireTable("t1").requireColumn("total").storage());
     }
 

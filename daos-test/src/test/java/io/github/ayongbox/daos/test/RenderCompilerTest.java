@@ -3,14 +3,17 @@ package io.github.ayongbox.daos.test;
 import io.github.ayongbox.daos.core.ir.NormalizedSchema;
 import io.github.ayongbox.daos.core.ir.RenderTree;
 import io.github.ayongbox.daos.core.ir.RenderTree.RenderNode;
+import io.github.ayongbox.daos.core.metadata.common.ConditionOperator;
 import io.github.ayongbox.daos.core.metadata.common.FieldLogicalType;
 import io.github.ayongbox.daos.core.metadata.common.FormScene;
+import io.github.ayongbox.daos.core.metadata.common.LogicOperator;
 import io.github.ayongbox.daos.core.metadata.common.MaskType;
 import io.github.ayongbox.daos.core.metadata.common.MetadataStatus;
 import io.github.ayongbox.daos.core.metadata.common.SortDirection;
 import io.github.ayongbox.daos.core.metadata.common.StorageMode;
 import io.github.ayongbox.daos.core.metadata.common.TableKind;
 import io.github.ayongbox.daos.core.metadata.common.TableOwnership;
+import io.github.ayongbox.daos.core.metadata.common.ValueType;
 import io.github.ayongbox.daos.core.metadata.field.FieldConfig;
 import io.github.ayongbox.daos.core.metadata.field.FieldConstraints;
 import io.github.ayongbox.daos.core.metadata.field.FieldUiHint;
@@ -18,6 +21,10 @@ import io.github.ayongbox.daos.core.metadata.field.SchemaField;
 import io.github.ayongbox.daos.core.metadata.form.FormComponent;
 import io.github.ayongbox.daos.core.metadata.form.FormField;
 import io.github.ayongbox.daos.core.metadata.form.FormType;
+import io.github.ayongbox.daos.core.metadata.form.LinkageAction;
+import io.github.ayongbox.daos.core.metadata.form.LinkageActionType;
+import io.github.ayongbox.daos.core.metadata.form.LinkageCondition;
+import io.github.ayongbox.daos.core.metadata.form.LinkageRule;
 import io.github.ayongbox.daos.core.metadata.form.SchemaForm;
 import io.github.ayongbox.daos.core.metadata.permission.FieldMask;
 import io.github.ayongbox.daos.core.metadata.permission.MaskRule;
@@ -157,6 +164,31 @@ class RenderCompilerTest {
     }
 
     @Test
+    void passesLinkageRulesAndFieldIdsToRuntime() {
+        SchemaTable users = table("t1", "users",
+                List.of(text("t1", "f1", "type"), text("t1", "f2", "priority")));
+        LinkageRule rule = new LinkageRule(
+                "rule-1", "紧急时必填", 100, true, List.of(FormScene.CREATE), LogicOperator.AND,
+                List.of(new LinkageCondition(
+                        "f1", ConditionOperator.EQ, "urgent", null, ValueType.STRING)),
+                List.of(new LinkageAction(
+                        "f2", List.of(), LinkageActionType.REQUIRE, null, null)),
+                List.of());
+        SchemaForm form = form("form-1", "basic", "t1", List.of(
+                field("n1", "f1", FormComponent.INPUT, null, false, false, List.of()),
+                field("n2", "f2", FormComponent.INPUT, null, false, false, List.of())),
+                List.of(rule));
+        NormalizedSchema schema = normalizer.normalize(
+                "demo", "snap-1", 1L, List.of(users), List.of(form));
+
+        RenderTree tree = compiler.compile(schema, "form-1", FormScene.CREATE, FieldMask.empty());
+
+        assertEquals(List.of(rule), tree.props().get("linkages"));
+        assertEquals("f1", tree.nodes().get(0).props().get("fieldId"));
+        assertEquals("f2", tree.nodes().get(1).props().get("fieldId"));
+    }
+
+    @Test
     void rejectsUnknownForm() {
         SchemaTable users = table("t1", "users", List.of(text("t1", "f1", "name")));
         NormalizedSchema schema = normalizer.normalize("demo", "snap-1", 1L, List.of(users));
@@ -183,9 +215,18 @@ class RenderCompilerTest {
     }
 
     private static SchemaForm form(String id, String code, String tableId, List<FormField> fields) {
+        return form(id, code, tableId, fields, List.of());
+    }
+
+    private static SchemaForm form(
+            String id,
+            String code,
+            String tableId,
+            List<FormField> fields,
+            List<LinkageRule> linkages) {
         return new SchemaForm(
                 id, APP_ID, tableId, code, code, null, FormType.RECORD, Map.of(),
-                fields, List.of(), List.of(), List.of(), MetadataStatus.PUBLISHED, 1, Map.of(),
+                fields, List.of(), linkages, List.of(), MetadataStatus.PUBLISHED, 1, Map.of(),
                 "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
     }
 

@@ -1,5 +1,8 @@
 package io.github.ayongbox.daos.runtime.engine.dialect;
 
+import io.github.ayongbox.daos.core.ir.IrColumn;
+import io.github.ayongbox.daos.core.ir.IrTable;
+import io.github.ayongbox.daos.core.ir.NormalizedSchema;
 import io.github.ayongbox.daos.core.metadata.common.FieldLogicalType;
 import io.github.ayongbox.daos.core.metadata.field.FieldConfig;
 import io.github.ayongbox.daos.core.metadata.field.SchemaField;
@@ -29,13 +32,96 @@ abstract class AbstractTypeMapper implements TypeMapper {
             case BOOLEAN -> booleanType();
             case MEMBER, DEPARTMENT -> varchar(36);
             case RELATION -> relationMultiple(config) ? jsonType() : varchar(36);
-            case ROLLUP, FORMULA -> throw new IllegalArgumentException(
-                    "计算字段不落物理列: " + field.code());
+            case ROLLUP -> rollupType(config, null, null);
+            case FORMULA -> formulaType(config);
             case AUTO_NUMBER -> varchar(64);
             case RATING, PROGRESS -> smallIntType();
             case LOCATION -> jsonType();
             case BARCODE -> varchar(512);
         };
+    }
+
+    @Override
+    public String sqlType(SchemaField field, IrTable table) {
+        FieldConfig config = field.config();
+        if (field.logicalType() == FieldLogicalType.ROLLUP) {
+            return rollupType(config, null, table);
+        }
+        if (field.logicalType() == FieldLogicalType.FORMULA) {
+            return formulaType(config);
+        }
+        return sqlType(field);
+    }
+
+    @Override
+    public String sqlType(SchemaField field, IrTable table, NormalizedSchema schema) {
+        if (field.logicalType() == FieldLogicalType.ROLLUP) {
+            return rollupType(field.config(), schema, table);
+        }
+        return sqlType(field, table);
+    }
+
+    private String formulaType(FieldConfig config) {
+        if (!(config instanceof FieldConfig.FormulaConfig formula)) {
+            return varchar(1024);
+        }
+        String resultType = formula.resultType() == null ? "text" : formula.resultType().toLowerCase();
+        int scale = formula.precision() > 0 ? formula.precision() : 6;
+        return switch (resultType) {
+            case "number", "integer", "int", "long" -> bigintType();
+            case "decimal", "double", "float" -> decimalType(20, Math.min(scale, 20));
+            case "boolean", "bool" -> booleanType();
+            case "date" -> dateType();
+            default -> varchar(1024);
+        };
+    }
+
+    private String rollupType(FieldConfig config, NormalizedSchema schema, IrTable table) {
+        if (!(config instanceof FieldConfig.RollupConfig rollup)) {
+            return decimalType(20, 6);
+        }
+        String aggregate = rollup.aggregate() == null ? "count" : rollup.aggregate().toLowerCase();
+        IrColumn source = sourceColumn(schema, table, rollup);
+        return switch (aggregate) {
+            case "count" -> bigintType();
+            case "sum", "avg" -> decimalType(20, Math.max(0, Math.min(rollup.precision(), 20)));
+            case "max", "min" -> sourceTypeOrDefault(source);
+            default -> decimalType(20, 6);
+        };
+    }
+
+    private String sourceTypeOrDefault(IrColumn source) {
+        if (source == null) {
+            return decimalType(20, 6);
+        }
+        FieldConfig config = source.source().config();
+        return switch (source.source().logicalType()) {
+            case NUMBER -> bigintType();
+            case RATING, PROGRESS -> smallIntType();
+            case DECIMAL -> decimalType(decimalPrecision(config), decimalScale(config));
+            case DATE -> dateType();
+            case DATETIME -> timestampType(3);
+            case BOOLEAN -> booleanType();
+            default -> varchar(1024);
+        };
+    }
+
+    private IrColumn sourceColumn(
+            NormalizedSchema schema, IrTable table, FieldConfig.RollupConfig rollup) {
+        if (rollup.relationFieldId() == null || rollup.sourceFieldId() == null) {
+            return null;
+        }
+        if (schema != null && table != null) {
+            for (IrTable child : schema.tablesById().values()) {
+                IrColumn relation = child.columnByFieldId(rollup.relationFieldId());
+                if (relation != null
+                        && relation.source().config() instanceof FieldConfig.RelationConfig config
+                        && table.tableId().equals(config.targetTableId())) {
+                    return child.columnByFieldId(rollup.sourceFieldId());
+                }
+            }
+        }
+        return table == null ? null : table.columnByFieldId(rollup.sourceFieldId());
     }
 
     @Override

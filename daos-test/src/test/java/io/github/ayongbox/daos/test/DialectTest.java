@@ -86,14 +86,41 @@ class DialectTest {
     }
 
     @Test
-    void autoNumberIsStoredAsPhysicalColumn() {
+    void rollupDdlResolvesCrossTableSourceTypeAndPrecision() {
+        SchemaTable orders = table("t1", "orders", List.of(
+                field("t1", "sum", "amount_sum", FieldLogicalType.ROLLUP,
+                        new FieldConfig.RollupConfig("rel", "amount", "sum", null, 3, true),
+                        FieldConstraints.defaults()),
+                field("t1", "max", "amount_max", FieldLogicalType.ROLLUP,
+                        new FieldConfig.RollupConfig("rel", "amount", "max", null, 2, false),
+                        FieldConstraints.defaults()),
+                field("t1", "count", "item_count", FieldLogicalType.ROLLUP,
+                        new FieldConfig.RollupConfig("rel", null, "count", null, 0, true),
+                        FieldConstraints.defaults())));
+        SchemaTable items = table("t2", "order_items", List.of(
+                decimal("t2", "amount", "amount"),
+                field("t2", "rel", "order_ref", FieldLogicalType.RELATION,
+                        new FieldConfig.RelationConfig(
+                                "t1", null, false, 0, null, null, false, null, null),
+                        FieldConstraints.defaults())));
+
+        NormalizedSchema schema = normalizer.normalize("demo", "snap-1", 1L, List.of(orders, items));
+        String createOrders = ddlCompiler.compile(schema, postgres).statements().get(0).sql();
+
+        assertTrue(createOrders.contains("\"amount_sum\" numeric(20,3)"));
+        assertTrue(createOrders.contains("\"amount_max\" numeric(20,6)"));
+        assertTrue(createOrders.contains("\"item_count\" bigint"));
+    }
+
+    @Test
+    void autoNumberRemainsDerivedWithoutPhysicalColumn() {
         SchemaTable orders = table("t1", "orders", List.of(autoNumber("t1", "f1", "serial")));
 
         NormalizedSchema schema = normalize(orders);
-        assertEquals(IrColumn.Storage.COLUMN,
+        assertEquals(IrColumn.Storage.DERIVED,
                 schema.requireTable("t1").requireColumn("serial").storage());
-        assertTrue(ddlCompiler.compile(schema, mysql).statements().get(0).sql()
-                .contains("`serial` varchar(64)"));
+        assertFalse(ddlCompiler.compile(schema, mysql).statements().get(0).sql()
+                .contains("`serial`"));
     }
 
     @Test

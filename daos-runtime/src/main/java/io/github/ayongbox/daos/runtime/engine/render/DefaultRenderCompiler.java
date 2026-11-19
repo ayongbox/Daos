@@ -46,7 +46,12 @@ public final class DefaultRenderCompiler implements RenderCompiler {
         IrTable table = schema.requireTable(form.tableId());
         List<RenderNode> nodes = renderFields(schema, table, form.source().fields(), mask);
 
-        return new RenderTree(formId, resolvedScene, form.source().schemaVersion(), nodes);
+        return new RenderTree(
+                formId,
+                resolvedScene,
+                form.source().schemaVersion(),
+                nodes,
+                Map.of("linkages", form.source().linkages()));
     }
 
     private List<RenderNode> renderFields(
@@ -135,6 +140,7 @@ public final class DefaultRenderCompiler implements RenderCompiler {
     private Map<String, Object> propsOf(
             FormField field, String fieldId, FieldMask mask, IrColumn column) {
         Map<String, Object> props = new LinkedHashMap<>(field.props());
+        putIfPresent(props, "fieldId", fieldId);
         putIfPresent(props, "placeholder", field.placeholder());
         putIfPresent(props, "helpText", field.helpText());
         putIfPresent(props, "tooltip", field.tooltip());

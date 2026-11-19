@@ -31,17 +31,18 @@ public final class DefaultDdlCompiler implements DdlCompiler {
 
         List<DdlPlan.Statement> statements = new ArrayList<>();
         for (IrTable table : schema.tablesById().values()) {
-            statements.addAll(compileTable(table, dialect));
+            statements.addAll(compileTable(schema, table, dialect));
         }
         return new DdlPlan(statements);
     }
 
-    private List<DdlPlan.Statement> compileTable(IrTable table, SqlDialect dialect) {
+    private List<DdlPlan.Statement> compileTable(
+            NormalizedSchema schema, IrTable table, SqlDialect dialect) {
         if (table.source().externalRef() != null) {
             return List.of();
         }
 
-        DdlDialect.TableDdl tableDdl = TableDdlFactory.table(table, dialect);
+        DdlDialect.TableDdl tableDdl = TableDdlFactory.table(schema, table, dialect);
         List<DdlPlan.Statement> statements = new ArrayList<>();
         statements.add(new DdlPlan.Statement(
                 DdlPlan.Operation.CREATE_TABLE,

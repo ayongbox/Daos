@@ -46,6 +46,7 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -79,7 +80,8 @@ class DataWriteServiceTest {
                         + "\"updated_by\" varchar(36), \"updated_at\" timestamp, "
                         + "\"version\" bigint NOT NULL DEFAULT 0, "
                         + "\"deleted\" boolean NOT NULL DEFAULT FALSE, "
-                        + "\"title\" varchar(255), \"owner\" varchar(36), \"code\" varchar(64) NOT NULL)"));
+                        + "\"title\" varchar(255), \"owner\" varchar(36), \"code\" varchar(64) NOT NULL, "
+                        + "\"quantity\" bigint, \"unit_price\" decimal(20,2), \"total\" decimal(20,2))"));
 
         MetadataStore metadataStore = new InMemoryMetadataStore();
         SnapshotStore snapshotStore = new InMemorySnapshotStore();
@@ -101,6 +103,32 @@ class DataWriteServiceTest {
         assertEquals(0L, ((Number) row.get("version")).longValue());
         assertEquals(Boolean.FALSE, row.get("deleted"));
         assertEquals("user-1", row.get("created_by"));
+    }
+
+    @Test
+    void insertCalculatesFormulaAndOverwritesSuppliedValue() {
+        Map<String, Object> values = values("alpha", "user-1", "A1");
+        values.put("quantity", 2L);
+        values.put("unit_price", new BigDecimal("3.50"));
+        values.put("total", new BigDecimal("999.00"));
+
+        String id = service.insert(APP_ID, "t1", values, allPermissions(null));
+
+        assertEquals(new BigDecimal("7.00"), row(id).get("total"));
+    }
+
+    @Test
+    void updateRecalculatesFormulaFromStoredAndSuppliedValues() {
+        Map<String, Object> values = values("alpha", "user-1", "A1");
+        values.put("quantity", 2L);
+        values.put("unit_price", new BigDecimal("3.50"));
+        String id = service.insert(APP_ID, "t1", values, allPermissions(null));
+
+        int affected = service.update(APP_ID, "t1", id, 0L,
+                Map.of("quantity", 4L), allPermissions(null));
+
+        assertEquals(1, affected);
+        assertEquals(new BigDecimal("14.00"), row(id).get("total"));
     }
 
     @Test
@@ -287,13 +315,20 @@ class DataWriteServiceTest {
         SchemaField title = field("f1", "title", false, false);
         SchemaField owner = field("f2", "owner", false, false);
         SchemaField code = field("f3", "code", true, true);
+        SchemaField quantity = typedField("f4", "quantity", FieldLogicalType.NUMBER,
+                new FieldConfig.NumberConfig(null, null, 1, 0, null, false));
+        SchemaField unitPrice = typedField("f5", "unit_price", FieldLogicalType.DECIMAL,
+                new FieldConfig.DecimalConfig(20, 2, null, null, null, null, null, false));
+        SchemaField total = typedField("f6", "total", FieldLogicalType.FORMULA,
+                new FieldConfig.FormulaConfig("{quantity} * {unit_price}", "decimal", 2, "REALTIME"));
 
         SchemaTable users = new SchemaTable(
                 "t1", APP_ID, TableOwnership.APPLICATION, false,
                 StorageMode.PHYSICAL, List.of(), null,
                 "users", "用户", null, null, null, null, 0,
                 TableKind.MAIN, MetadataStatus.PUBLISHED, false, null, List.of(), null,
-                SortDirection.ASC, TableOptions.defaults(), List.of(title, owner, code),
+                SortDirection.ASC, TableOptions.defaults(),
+                List.of(title, owner, code, quantity, unitPrice, total),
                 List.of(), List.<RelationDef>of(), Map.of(),
                 "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
 
@@ -311,6 +346,15 @@ class DataWriteServiceTest {
                 new FieldConstraints(required, false, false, false, true, true,
                         immutable, false, true, null, null, false, null),
                 FieldUiHint.empty(),
+                MetadataStatus.PUBLISHED, false, false, 0, null, Map.of(),
+                "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
+    }
+
+    private static SchemaField typedField(
+            String id, String code, FieldLogicalType logicalType, FieldConfig config) {
+        return new SchemaField(
+                id, APP_ID, "t1", code, code, null, logicalType, config,
+                FieldConstraints.defaults(), FieldUiHint.empty(),
                 MetadataStatus.PUBLISHED, false, false, 0, null, Map.of(),
                 "system", TIMESTAMP, "system", TIMESTAMP, false, 1);
     }

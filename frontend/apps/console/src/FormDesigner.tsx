@@ -29,11 +29,13 @@ import type {
   FormComponent,
   FormField,
   FormLayout,
+  LinkageRule,
   RelationConfig,
   SchemaApp,
   SchemaField,
   SchemaForm,
-  SchemaTable
+  SchemaTable,
+  ValueType
 } from '@daos/metadata';
 
 const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -172,6 +174,93 @@ function optionsOf(field: SchemaField): Array<{ label: string; value: string }> 
   }
   const config = field.config as { options?: Array<{ label: string; code: string }> };
   return (config.options ?? []).map((option) => ({ label: option.label, value: option.code }));
+}
+
+const LINKAGE_OPERATOR_OPTIONS = [
+  { value: 'eq', label: '等于' },
+  { value: 'ne', label: '不等于' },
+  { value: 'empty', label: '为空' },
+  { value: 'not_empty', label: '不为空' },
+  { value: 'gt', label: '大于' },
+  { value: 'lt', label: '小于' }
+];
+
+const LINKAGE_ACTION_OPTIONS = [
+  { value: 'show', label: '显示' },
+  { value: 'hide', label: '隐藏' },
+  { value: 'require', label: '设为必填' },
+  { value: 'optional', label: '恢复必填基线' },
+  { value: 'readonly', label: '设为只读' },
+  { value: 'editable', label: '恢复只读基线' },
+  { value: 'set_value', label: '赋值' },
+  { value: 'clear_value', label: '清空值' }
+];
+
+function linkageValueType(field: FormField | undefined): ValueType {
+  if (!field) return 'STRING';
+  if (['number', 'currency', 'percent', 'progress', 'rating'].includes(field.component)) {
+    return 'NUMBER';
+  }
+  if (field.component === 'switch') return 'BOOLEAN';
+  if (field.component === 'date') return 'DATE';
+  if (field.component === 'datetime') return 'DATETIME';
+  return 'STRING';
+}
+
+function LinkageValueEditor({
+  field,
+  value,
+  onChange
+}: {
+  field: FormField | undefined;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  if (field && ['number', 'currency', 'percent', 'progress', 'rating'].includes(field.component)) {
+    return (
+      <InputNumber
+        style={{ width: 180 }}
+        value={typeof value === 'number' ? value : null}
+        onChange={onChange}
+      />
+    );
+  }
+  if (field?.component === 'switch') {
+    return (
+      <Select
+        style={{ width: 180 }}
+        value={typeof value === 'boolean' ? value : undefined}
+        options={[
+          { value: true, label: '是' },
+          { value: false, label: '否' }
+        ]}
+        onChange={onChange}
+      />
+    );
+  }
+  const options = Array.isArray(field?.props.options)
+    ? field.props.options.filter(
+        (item): item is { label: string; value: string } =>
+          typeof item === 'object' && item !== null && 'label' in item && 'value' in item
+      )
+    : [];
+  if (options.length > 0) {
+    return (
+      <Select
+        style={{ width: 180 }}
+        value={typeof value === 'string' ? value : undefined}
+        options={options}
+        onChange={onChange}
+      />
+    );
+  }
+  return (
+    <Input
+      style={{ width: 180 }}
+      value={value === null || value === undefined ? '' : String(value)}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
 }
 
 /** 把建模字段转成表单项，字段语义只来自元数据，组件仅决定交互形态。 */
@@ -357,6 +446,7 @@ export function FormDesigner({
   const [selectedFormId, setSelectedFormId] = useState<string | null>(draft.forms[0]?.id ?? null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [linkageOpen, setLinkageOpen] = useState(false);
   const [createFormInstance] = Form.useForm<CreateFormValues>();
   const [subformOpen, setSubformOpen] = useState(false);
   const [subformFormInstance] = Form.useForm<SubformValues>();
@@ -365,6 +455,7 @@ export function FormDesigner({
   const form = draft.forms.find((item) => item.id === selectedFormId) ?? null;
   const table = form ? draft.tables.find((item) => item.id === form.tableId) ?? null : null;
   const selectedField = form?.fields.find((item) => item.id === selectedFieldId) ?? null;
+  const linkageFields = form?.fields.filter((item) => item.fieldId && item.component !== 'subform') ?? [];
 
   useEffect(() => {
     if (draft.forms.length === 0) {
@@ -394,6 +485,80 @@ export function FormDesigner({
     patchForm(form.id, (current) => ({
       ...current,
       fields: current.fields.map((item) => (item.id === fieldId ? update(item) : item))
+    }));
+  }
+
+  function patchLinkageRule(ruleId: string, update: (current: LinkageRule) => LinkageRule) {
+    if (!form) return;
+    patchForm(form.id, (current) => ({
+      ...current,
+      linkages: current.linkages.map((rule) => (rule.id === ruleId ? update(rule) : rule))
+    }));
+  }
+
+  function patchCondition(
+    rule: LinkageRule,
+    update: Partial<LinkageRule['when'][number]>
+  ) {
+    patchLinkageRule(rule.id, (current) => {
+      const condition = current.when[0];
+      return condition ? { ...current, when: [{ ...condition, ...update }] } : current;
+    });
+  }
+
+  function patchAction(
+    rule: LinkageRule,
+    update: Partial<LinkageRule['then'][number]>
+  ) {
+    patchLinkageRule(rule.id, (current) => {
+      const action = current.then[0];
+      return action ? { ...current, then: [{ ...action, ...update }] } : current;
+    });
+  }
+
+  function addLinkageRule() {
+    if (!form) return;
+    const source = linkageFields[0];
+    const target = linkageFields[1] ?? source;
+    if (!source?.fieldId || !target?.fieldId) {
+      message.error('请先向表单添加字段');
+      return;
+    }
+    const rule: LinkageRule = {
+      id: newId(),
+      name: `规则 ${form.linkages.length + 1}`,
+      priority: (form.linkages.length + 1) * 100,
+      enabled: true,
+      scenes: [],
+      logic: 'AND',
+      when: [
+        {
+          fieldId: source.fieldId,
+          operator: 'eq',
+          value: '',
+          valueFieldId: null,
+          valueType: linkageValueType(source)
+        }
+      ],
+      then: [
+        {
+          fieldId: target.fieldId,
+          targetFieldIds: [],
+          action: 'require',
+          value: null,
+          expression: null
+        }
+      ],
+      otherwise: []
+    };
+    patchForm(form.id, (current) => ({ ...current, linkages: [...current.linkages, rule] }));
+  }
+
+  function removeLinkageRule(ruleId: string) {
+    if (!form) return;
+    patchForm(form.id, (current) => ({
+      ...current,
+      linkages: current.linkages.filter((rule) => rule.id !== ruleId)
     }));
   }
 
@@ -676,6 +841,9 @@ export function FormDesigner({
         extra={
           form ? (
             <Space size={6}>
+              <Button size="small" onClick={() => setLinkageOpen(true)}>
+                联动规则
+              </Button>
               <Tag style={{ marginInlineEnd: 0 }}>{form.fields.length} 项</Tag>
               <Tag color="orange" style={{ marginInlineEnd: 0 }}>
                 需发布后生效
@@ -983,6 +1151,183 @@ export function FormDesigner({
           </Space>
         )}
       </Card>
+
+      <Modal
+        title="联动规则"
+        open={linkageOpen}
+        onCancel={() => setLinkageOpen(false)}
+        footer={
+          <Button type="primary" onClick={() => setLinkageOpen(false)}>
+            完成
+          </Button>
+        }
+        width={920}
+        destroyOnClose
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              每条规则包含一个条件和一个命中动作；未命中时的恢复动作可用相反条件配置。
+            </Typography.Text>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              disabled={linkageFields.length === 0}
+              onClick={addLinkageRule}
+            >
+              添加规则
+            </Button>
+          </Space>
+          {!form || form.linkages.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有联动规则" />
+          ) : (
+            form.linkages.map((rule) => {
+              const condition = rule.when[0];
+              const action = rule.then[0];
+              if (!condition || !action) return null;
+              const source = linkageFields.find((field) => field.fieldId === condition.fieldId);
+              const target = linkageFields.find((field) => field.fieldId === action.fieldId);
+              const valueOptional = condition.operator === 'empty' || condition.operator === 'not_empty';
+              return (
+                <Card
+                  key={rule.id}
+                  size="small"
+                  title={
+                    <Input
+                      style={{ maxWidth: 240 }}
+                      value={rule.name ?? ''}
+                      maxLength={40}
+                      onChange={(event) =>
+                        patchLinkageRule(rule.id, (current) => ({
+                          ...current,
+                          name: event.target.value
+                        }))
+                      }
+                    />
+                  }
+                  extra={
+                    <Space>
+                      <Switch
+                        size="small"
+                        checked={rule.enabled}
+                        onChange={(enabled) =>
+                          patchLinkageRule(rule.id, (current) => ({ ...current, enabled }))
+                        }
+                      />
+                      <Button
+                        type="text"
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => removeLinkageRule(rule.id)}
+                      />
+                    </Space>
+                  }
+                >
+                  <Space direction="vertical" style={{ width: '100%' }} size={10}>
+                    <Space wrap size={8}>
+                      <Typography.Text strong>当</Typography.Text>
+                      <Select
+                        style={{ width: 170 }}
+                        value={condition.fieldId}
+                        options={linkageFields.map((field) => ({
+                          value: field.fieldId,
+                          label: field.label ?? field.fieldId
+                        }))}
+                        onChange={(fieldId) =>
+                          patchCondition(rule, {
+                            fieldId,
+                            value: null,
+                            valueFieldId: null,
+                            valueType: linkageValueType(
+                              linkageFields.find((field) => field.fieldId === fieldId)
+                            )
+                          })
+                        }
+                      />
+                      <Select
+                        style={{ width: 110 }}
+                        value={condition.operator}
+                        options={LINKAGE_OPERATOR_OPTIONS}
+                        onChange={(operator) =>
+                          patchCondition(rule, {
+                            operator,
+                            value: null,
+                            valueFieldId: null
+                          })
+                        }
+                      />
+                      {!valueOptional ? (
+                        <>
+                          <Select
+                            style={{ width: 110 }}
+                            value={condition.valueFieldId ? 'FIELD' : 'STATIC'}
+                            options={[
+                              { value: 'STATIC', label: '固定值' },
+                              { value: 'FIELD', label: '字段值' }
+                            ]}
+                            onChange={(mode) =>
+                              patchCondition(rule, {
+                                value: null,
+                                valueFieldId:
+                                  mode === 'FIELD' ? linkageFields[0]?.fieldId ?? null : null
+                              })
+                            }
+                          />
+                          {condition.valueFieldId ? (
+                            <Select
+                              style={{ width: 180 }}
+                              value={condition.valueFieldId}
+                              options={linkageFields.map((field) => ({
+                                value: field.fieldId,
+                                label: field.label ?? field.fieldId
+                              }))}
+                              onChange={(valueFieldId) => patchCondition(rule, { valueFieldId })}
+                            />
+                          ) : (
+                            <LinkageValueEditor
+                              field={source}
+                              value={condition.value}
+                              onChange={(value) => patchCondition(rule, { value })}
+                            />
+                          )}
+                        </>
+                      ) : null}
+                    </Space>
+                    <Space wrap size={8}>
+                      <Typography.Text strong>则</Typography.Text>
+                      <Select
+                        style={{ width: 170 }}
+                        value={action.fieldId ?? undefined}
+                        options={linkageFields.map((field) => ({
+                          value: field.fieldId,
+                          label: field.label ?? field.fieldId
+                        }))}
+                        onChange={(fieldId) => patchAction(rule, { fieldId, value: null })}
+                      />
+                      <Select
+                        style={{ width: 150 }}
+                        value={action.action}
+                        options={LINKAGE_ACTION_OPTIONS}
+                        onChange={(nextAction) =>
+                          patchAction(rule, { action: nextAction, value: null })
+                        }
+                      />
+                      {action.action === 'set_value' ? (
+                        <LinkageValueEditor
+                          field={target}
+                          value={action.value}
+                          onChange={(value) => patchAction(rule, { value })}
+                        />
+                      ) : null}
+                    </Space>
+                  </Space>
+                </Card>
+              );
+            })
+          )}
+        </Space>
+      </Modal>
 
       <Modal
         title="新建表单"
