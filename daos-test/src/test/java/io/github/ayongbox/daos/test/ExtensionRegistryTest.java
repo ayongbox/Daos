@@ -28,10 +28,9 @@ class ExtensionRegistryTest {
     @Test
     void installsExtensionAndExposesPoints() {
         ExtensionRegistry registry = ExtensionRegistry.empty();
-        ExtensionManifest manifest = manifest("ext.multi_tenant",
-                new TestPoint("multi_tenant", "1.0.0", ExtensionRegistry.CURRENT_CONTRACT_VERSION));
 
-        registry.install(manifest);
+        registry.install(manifest("ext.multi_tenant", List.of(),
+                new TestPoint("multi_tenant", "1.0.0")));
 
         assertTrue(registry.isInstalled("ext.multi_tenant"));
         assertEquals(List.of("ext.multi_tenant"), registry.installedCodes());
@@ -41,10 +40,10 @@ class ExtensionRegistryTest {
     @Test
     void rejectsDuplicatePackageCode() {
         ExtensionRegistry registry = ExtensionRegistry.empty();
-        registry.install(manifest("ext.a", point("a")));
+        registry.install(manifest("ext.a", List.of(), point("a")));
 
         ExtensionAssemblyException error = assertThrows(ExtensionAssemblyException.class,
-                () -> registry.install(manifest("ext.a", point("b"))));
+                () -> registry.install(manifest("ext.a", List.of(), point("b"))));
 
         assertTrue(error.getMessage().contains("已安装"));
     }
@@ -52,10 +51,10 @@ class ExtensionRegistryTest {
     @Test
     void rejectsDuplicatePointAcrossPackages() {
         ExtensionRegistry registry = ExtensionRegistry.empty();
-        registry.install(manifest("ext.a", point("shared")));
+        registry.install(manifest("ext.a", List.of(), point("shared")));
 
         ExtensionAssemblyException error = assertThrows(ExtensionAssemblyException.class,
-                () -> registry.install(manifest("ext.b", point("shared"))));
+                () -> registry.install(manifest("ext.b", List.of(), point("shared"))));
 
         assertTrue(error.getMessage().contains("重复"));
     }
@@ -63,10 +62,13 @@ class ExtensionRegistryTest {
     @Test
     void rejectsIncompatibleContractVersion() {
         ExtensionRegistry registry = ExtensionRegistry.empty();
-        ExtensionPoint legacy = new TestPoint("legacy", "1.0.0", ExtensionRegistry.CURRENT_CONTRACT_VERSION + 1);
+        ExtensionManifest legacy = new ExtensionManifest(
+                "ext.legacy", "legacy", "1.0.0", "daos",
+                ExtensionRegistry.CURRENT_CONTRACT_VERSION + 1,
+                List.of(), List.of(point("legacy")));
 
         ExtensionAssemblyException error = assertThrows(ExtensionAssemblyException.class,
-                () -> registry.install(manifest("ext.legacy", legacy)));
+                () -> registry.install(legacy));
 
         assertTrue(error.getMessage().contains("契约版本"));
         assertTrue(registry.manifests().isEmpty());
@@ -75,8 +77,8 @@ class ExtensionRegistryTest {
     @Test
     void batchInstallIsAtomic() {
         ExtensionRegistry registry = ExtensionRegistry.empty();
-        ExtensionManifest valid = manifest("ext.a", point("a"));
-        ExtensionManifest conflict = manifest("ext.b", point("a"));
+        ExtensionManifest valid = manifest("ext.a", List.of(), point("a"));
+        ExtensionManifest conflict = manifest("ext.b", List.of(), point("a"));
 
         assertThrows(ExtensionAssemblyException.class,
                 () -> registry.installAll(List.of(valid, conflict)));
@@ -88,17 +90,55 @@ class ExtensionRegistryTest {
     @Test
     void rejectsManifestWithoutPoints() {
         assertThrows(IllegalArgumentException.class,
-                () -> new ExtensionManifest("ext.empty", "空扩展", "1.0.0", null, List.of()));
+                () -> new ExtensionManifest(
+                        "ext.empty", "空扩展", "1.0.0", null,
+                        ExtensionRegistry.CURRENT_CONTRACT_VERSION, List.of(), List.of()));
     }
 
-    private static ExtensionManifest manifest(String code, ExtensionPoint... points) {
-        return new ExtensionManifest(code, code, "1.0.0", "daos", List.of(points));
+    @Test
+    void rejectsMissingDependency() {
+        ExtensionRegistry registry = ExtensionRegistry.empty();
+
+        ExtensionAssemblyException error = assertThrows(ExtensionAssemblyException.class,
+                () -> registry.install(manifest("ext.plus", List.of("ext.base"), point("plus"))));
+
+        assertTrue(error.getMessage().contains("依赖未安装"));
+        assertTrue(registry.manifests().isEmpty());
+    }
+
+    @Test
+    void dependencyMustBeInstalledBeforeDependent() {
+        ExtensionRegistry registry = ExtensionRegistry.empty();
+        ExtensionManifest base = manifest("ext.base", List.of(), point("base"));
+        ExtensionManifest plus = manifest("ext.plus", List.of("ext.base"), point("plus"));
+
+        assertThrows(ExtensionAssemblyException.class,
+                () -> registry.installAll(List.of(plus, base)));
+
+        assertTrue(registry.manifests().isEmpty());
+
+        registry.installAll(List.of(base, plus));
+
+        assertEquals(List.of("ext.base", "ext.plus"), registry.installedCodes());
+    }
+
+    @Test
+    void rejectsSelfDependency() {
+        assertThrows(IllegalArgumentException.class,
+                () -> manifest("ext.self", List.of("ext.self"), point("self")));
+    }
+
+    private static ExtensionManifest manifest(
+            String code, List<String> requires, ExtensionPoint... points) {
+        return new ExtensionManifest(
+                code, code, "1.0.0", "daos",
+                ExtensionRegistry.CURRENT_CONTRACT_VERSION, requires, List.of(points));
     }
 
     private static ExtensionPoint point(String code) {
-        return new TestPoint(code, "1.0.0", ExtensionRegistry.CURRENT_CONTRACT_VERSION);
+        return new TestPoint(code, "1.0.0");
     }
 
-    private record TestPoint(String code, String version, int compatibleSchemaVersion) implements ExtensionPoint {
+    private record TestPoint(String code, String version) implements ExtensionPoint {
     }
 }

@@ -9,8 +9,8 @@ import java.util.Optional;
 /**
  * 扩展点注册表。社区版默认不安装任何扩展包，内核能力不依赖扩展。
  *
- * <p>装配规则：扩展包编码与扩展点编码全局唯一；扩展点声明的契约主版本必须与内核一致。
- * 批量装配是全有或全无，失败时不留下半装配状态。</p>
+ * <p>装配规则：扩展包编码与扩展点编码全局唯一；扩展包声明的契约主版本必须与内核一致；
+ * 依赖必须在同一批次中先于使用方装配。批量装配是全有或全无，失败时不留下半装配状态。</p>
  */
 public final class ExtensionRegistry {
 
@@ -44,15 +44,23 @@ public final class ExtensionRegistry {
 
         for (ExtensionManifest manifest : candidates) {
             Objects.requireNonNull(manifest, "manifest");
-            if (nextManifests.putIfAbsent(manifest.code(), manifest) != null) {
+            if (manifest.contractVersion() != CURRENT_CONTRACT_VERSION) {
+                throw new ExtensionAssemblyException(
+                        "扩展包 " + manifest.code() + " 声明契约版本 "
+                                + manifest.contractVersion() + "，内核为 " + CURRENT_CONTRACT_VERSION);
+            }
+            if (nextManifests.containsKey(manifest.code())) {
                 throw new ExtensionAssemblyException("扩展包已安装: " + manifest.code());
             }
-            for (ExtensionPoint point : manifest.points()) {
-                if (point.compatibleSchemaVersion() != CURRENT_CONTRACT_VERSION) {
+            for (String required : manifest.requires()) {
+                if (!nextManifests.containsKey(required)) {
                     throw new ExtensionAssemblyException(
-                            "扩展点 " + point.code() + " 声明契约版本 "
-                                    + point.compatibleSchemaVersion() + "，内核为 " + CURRENT_CONTRACT_VERSION);
+                            "扩展包 " + manifest.code() + " 依赖未安装的扩展包: " + required
+                                    + "，依赖必须在同一批次中先装配");
                 }
+            }
+            nextManifests.put(manifest.code(), manifest);
+            for (ExtensionPoint point : manifest.points()) {
                 if (nextPoints.putIfAbsent(point.code(), point) != null) {
                     throw new ExtensionAssemblyException("扩展点编码重复: " + point.code());
                 }
