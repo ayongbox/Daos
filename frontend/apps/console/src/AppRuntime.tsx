@@ -248,11 +248,13 @@ function subformNodes(nodes: RenderNode[]): RenderNode[] {
 function RecordViewer({
   appId,
   formCode,
-  recordId
+  recordId,
+  reloadKey = 0
 }: {
   appId: string;
   formCode: string;
   recordId: string;
+  reloadKey?: number;
 }) {
   const [detail, setDetail] = useState<FormRecordDetail | null>(null);
   const [nodes, setNodes] = useState<RenderNode[] | null>(null);
@@ -280,7 +282,7 @@ function RecordViewer({
     return () => {
       cancelled = true;
     };
-  }, [appId, formCode, recordId]);
+  }, [appId, formCode, recordId, reloadKey]);
 
   if (error) return <Alert type="error" showIcon message={error} />;
   if (!detail || !nodes) return <Spin />;
@@ -672,7 +674,14 @@ export function AppRuntime({
   const [editor, setEditor] = useState<{ formCode: string; recordId?: string } | null>(null);
   const [viewer, setViewer] = useState<{ formCode: string; recordId: string } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [viewerKey, setViewerKey] = useState(0);
+  const [structureKey, setStructureKey] = useState(0);
   const appliedInitialMenu = useRef<string | null>(null);
+  /** 刷新外壳：重新拉取菜单、表单与视图，再刷新当前页面数据。 */
+  function refreshShell() {
+    setStructureKey((current) => current + 1);
+    setReloadKey((current) => current + 1);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -692,7 +701,7 @@ export function AppRuntime({
     return () => {
       cancelled = true;
     };
-  }, [appId]);
+  }, [appId, structureKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -711,7 +720,7 @@ export function AppRuntime({
     return () => {
       cancelled = true;
     };
-  }, [appId]);
+  }, [appId, structureKey]);
 
   const previewMenus = useMemo(() => (draft ? draftMenuList(draft) : []), [draft]);
   const menus = mode === 'preview' ? previewMenus : runtimeMenus;
@@ -735,6 +744,12 @@ export function AppRuntime({
         : menus[0]?.menuId ?? null
     );
   }, [menus, mode, initialMenuId]);
+
+  // 切换页面时关闭可能残留的详情或编辑抽屉，避免操作落到新页面之外。
+  useEffect(() => {
+    setEditor(null);
+    setViewer(null);
+  }, [activeMenuId]);
 
   /** 设计预览只允许进入已发布目标，避免草稿新增页面请求 404。 */
   function isAvailable(menu: MenuSummary): boolean {
@@ -791,15 +806,23 @@ export function AppRuntime({
       >
         <AppIcon icon={draft?.icon} name={draft?.displayName ?? '应用'} size={32} />
         <div style={{ minWidth: 0 }}>
-          <Typography.Text strong ellipsis style={{ display: 'block', fontSize: 15 }}>
-            {draft?.displayName ?? '应用运行端'}
-          </Typography.Text>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+            <Typography.Text ellipsis style={{ fontSize: 12, color: tokens.colorTextTertiary }}>
+              {draft?.displayName ?? '应用运行端'}
+            </Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              /
+            </Typography.Text>
+            <Typography.Text strong ellipsis style={{ fontSize: 15 }}>
+              {activeMenu?.displayName ?? '未选择页面'}
+            </Typography.Text>
+          </div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {mode === 'preview' ? '设计预览 · 当前草稿结构' : '运行态 · 最近一次发布版本'}
           </Typography.Text>
         </div>
         <div style={{ flex: 1 }} />
-        <Button size="small" onClick={() => setReloadKey((current) => current + 1)}>
+        <Button size="small" onClick={refreshShell}>
           刷新
         </Button>
         {draft ? (
@@ -1006,6 +1029,7 @@ export function AppRuntime({
             appId={appId}
             formCode={viewer.formCode}
             recordId={viewer.recordId}
+            reloadKey={viewerKey}
           />
         ) : null}
       </Drawer>
@@ -1023,9 +1047,13 @@ export function AppRuntime({
             fixedFormCode={editor.formCode}
             recordId={editor.recordId}
             embedded
-            onSaved={() => {
+            onSaved={(recordId) => {
               setEditor(null);
               setReloadKey((current) => current + 1);
+              if (recordId) {
+                setViewer({ formCode: editor.formCode, recordId });
+                setViewerKey((current) => current + 1);
+              }
             }}
           />
         ) : null}

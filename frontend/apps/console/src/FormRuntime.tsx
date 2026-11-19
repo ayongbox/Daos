@@ -647,7 +647,7 @@ export function FormRuntime({
   fixedFormCode?: string;
   recordId?: string;
   embedded?: boolean;
-  onSaved?: () => void;
+  onSaved?: (recordId?: string) => void;
 }) {
   const { message } = AntApp.useApp();
   const [forms, setForms] = useState<FormSummary[] | null>(null);
@@ -796,13 +796,16 @@ export function FormRuntime({
           subforms
         });
         message.success('已保存');
-        onSaved?.();
+        onSaved?.(recordId);
       } else {
-        await api.createFormRecord(appId, result.formCode, { values: payload, subforms });
+        const created = await api.createFormRecord(appId, result.formCode, {
+          values: payload,
+          subforms
+        });
         runtimeForm.resetFields();
         message.success('已提交');
         await refreshRecords();
-        onSaved?.();
+        onSaved?.(created.id);
       }
     } catch (cause) {
       if (cause instanceof ApiError) {
