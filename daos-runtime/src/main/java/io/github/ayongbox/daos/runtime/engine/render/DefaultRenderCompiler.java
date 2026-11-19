@@ -153,10 +153,30 @@ public final class DefaultRenderCompiler implements RenderCompiler {
             props.put("multiple", relation.multiple());
             props.put("maxSelected", relation.maxSelected());
         }
+        if (column != null && column.source().config() instanceof FieldConfig.SelectConfig select) {
+            props.put("options", optionProps(select.options()));
+        }
+        if (column != null
+                && column.source().config() instanceof FieldConfig.MultiSelectConfig multi) {
+            props.put("options", optionProps(multi.options()));
+        }
         if (fieldId != null) {
             maskRuleOf(mask, fieldId).ifPresent(rule -> putMaskRule(props, rule));
         }
         return props;
+    }
+
+    private List<Map<String, Object>> optionProps(List<io.github.ayongbox.daos.core.metadata.field.OptionItem> options) {
+        if (options == null) return List.of();
+        return options.stream()
+                .filter(option -> option.enabled())
+                .map(option -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("label", option.label());
+                    item.put("value", option.code());
+                    return item;
+                })
+                .toList();
     }
 
     private Optional<MaskRule> maskRuleOf(FieldMask mask, String fieldId) {

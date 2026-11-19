@@ -946,7 +946,17 @@ export function AppRuntime({
                       </Typography.Text>
                     ) : null}
                     {code ? (
-                      <FormRuntime appId={appId} fixedFormCode={code} />
+                      <FormRuntime
+                        appId={appId}
+                        fixedFormCode={code}
+                        onSaved={(recordId) => {
+                          setReloadKey((current) => current + 1);
+                          if (recordId) {
+                            setViewer({ formCode: code, recordId });
+                            setViewerKey((current) => current + 1);
+                          }
+                        }}
+                      />
                     ) : (
                       <Alert type="warning" showIcon message="该表单块还没有选择表单" />
                     )}
@@ -983,7 +993,18 @@ export function AppRuntime({
             })}
           </Space>
         ) : activeMenu.menuType === 'FORM' ? (
-          <FormRuntime appId={appId} fixedFormCode={activeMenu.targetCode} />
+          <FormRuntime
+            appId={appId}
+            fixedFormCode={activeMenu.targetCode}
+            onSaved={(recordId) => {
+              setReloadKey((current) => current + 1);
+              const formCode = activeMenu.targetCode;
+              if (recordId && formCode) {
+                setViewer({ formCode, recordId });
+                setViewerKey((current) => current + 1);
+              }
+            }}
+          />
         ) : activeMenu.menuType === 'VIEW' ? (
           <ViewRuntime
             appId={appId}
