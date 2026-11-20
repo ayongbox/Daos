@@ -707,12 +707,26 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
 
   async function publish() {
     if (!draft) return;
+    let remark = '';
     modal.confirm({
       title: '发布并执行结构演进？',
-      content: '将按预览差异执行 DDL 并激活新版本；失败会自动回滚 SQL。',
+      content: (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            将按预览差异执行 DDL 并激活新版本；失败会自动回滚 SQL。
+          </Typography.Text>
+          <Input.TextArea
+            rows={3}
+            placeholder="发布说明（可选）"
+            onChange={(event) => {
+              remark = event.target.value;
+            }}
+          />
+        </Space>
+      ),
       onOk: async () => {
         try {
-          await api.apply(draft.id);
+          await api.apply(draft.id, remark.trim() || null);
           await reloadDraft(draft.id);
           refreshApps();
           message.success('发布成功');
@@ -1136,6 +1150,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                     setSelectedTableId(tableId);
                     setCapability('model');
                   }}
+                  onRefreshSummary={refreshApps}
                 />
               ) : capability === 'form' ? (
                 <FormDesigner

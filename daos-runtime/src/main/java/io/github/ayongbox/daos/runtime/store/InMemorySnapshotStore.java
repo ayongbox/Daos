@@ -4,6 +4,7 @@ import io.github.ayongbox.daos.core.snapshot.SchemaSnapshot;
 import io.github.ayongbox.daos.core.spi.SnapshotStore;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,13 @@ public final class InMemorySnapshotStore implements SnapshotStore {
     public synchronized Optional<SchemaSnapshot> findActive(String appId) {
         String snapshotId = activeByApp.get(appId);
         return snapshotId == null ? Optional.empty() : findById(snapshotId);
+    }
+
+    @Override
+    public synchronized List<SchemaSnapshot> listByApp(String appId) {
+        return byApp.getOrDefault(appId, List.of()).stream()
+                .sorted(Comparator.comparingLong(SchemaSnapshot::releaseVersion).reversed())
+                .toList();
     }
 
     @Override

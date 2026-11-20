@@ -29,7 +29,8 @@ import java.util.Optional;
  * <p>固定顺序：读取草稿 → 归一化 → 编译差异 → 事务执行 DDL → 发布并激活快照 → 写入台账。
  * 发布失败时先执行回滚 SQL 再记录失败，避免数据库结构与生效快照脱节。</p>
  *
- * <p>同一应用只允许回滚最近一次生效的迁移，且首次发布不提供自动回滚。
+ * <p>按迁移记录回滚时只允许回滚最近一次生效的迁移；{@link #rollbackTo} 支持跨多步回退到任意历史版本。
+ * 首次发布不提供自动回滚。
  * 单机内以实例锁串行化演进与回滚；多实例部署需由外部锁保证互斥。</p>
  */
 public final class SchemaEvolutionService {
@@ -91,6 +92,13 @@ public final class SchemaEvolutionService {
      * 执行草稿的结构变更并发布。首次发布同样走本方法，先建表再激活快照。
      */
     public synchronized MigrationRecord apply(String appId, String operator) {
+        return apply(appId, operator, null);
+    }
+
+    /**
+     * 执行草稿的结构变更并发布，快照携带发布说明 {@code remark}。
+     */
+    public synchronized MigrationRecord apply(String appId, String operator, String remark) {
         Objects.requireNonNull(appId, "appId");
         requireOperator(operator);
 
@@ -120,7 +128,7 @@ public final class SchemaEvolutionService {
 
         SchemaSnapshot published;
         try {
-            published = publishService.publish(appId, operator);
+            published = publishService.publish(appId, operator, remark);
         } catch (RuntimeException error) {
             restore(plan);
             migrationStore.append(failed(pending, error));
@@ -178,6 +186,43 @@ public final class SchemaEvolutionService {
 
         migrationStore.update(record.withStatus(
                 MigrationStatus.ROLLED_BACK, clock.instant().toString(), null));
+    }
+
+    /**
+     * 回滚到任意历史发布版本：跨多步一次性把当前结构退回目标版本结构，并切回目标快照。
+     *
+     * <p>被 DROP 的列数据不恢复。目标版本之后所有已生效的迁移记录标记为 ROLLED_BACK。
+     * 单机内以实例锁串行化，与 {@link #apply}、{@link #rollback} 互斥。</p>
+     */
+    public synchronized void rollbackTo(String appId, long releaseVersion, String operator) {
+        Objects.requireNonNull(appId, "appId");
+        requireOperator(operator);
+
+        SchemaSnapshot target = snapshotStore.listByApp(appId).stream()
+                .filter(snapshot -> snapshot.releaseVersion() == releaseVersion)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("发布版本不存在: v" + releaseVersion));
+        SchemaSnapshot active = snapshotStore.findActive(appId)
+                .orElseThrow(() -> new IllegalStateException("应用没有生效快照: " + appId));
+        if (target.snapshotId().equals(active.snapshotId())) {
+            throw new IllegalArgumentException("目标版本已是当前生效版本");
+        }
+
+        MigrationPlan plan = compiler.plan(normalize(target), normalize(active), dialect);
+        dataAccess.execute(plan.rollbackStatements());
+
+        try {
+            snapshotStore.activate(appId, target.snapshotId());
+        } catch (RuntimeException error) {
+            dataAccess.execute(plan.forwardStatements());
+            throw error;
+        }
+
+        migrationStore.listByApp(appId).stream()
+                .filter(record -> record.status() == MigrationStatus.APPLIED)
+                .filter(record -> record.toVersion() > target.releaseVersion())
+                .forEach(record -> migrationStore.update(record.withStatus(
+                        MigrationStatus.ROLLED_BACK, clock.instant().toString(), null)));
     }
 
     public List<MigrationRecord> history(String appId) {

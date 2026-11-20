@@ -10,6 +10,8 @@ import java.util.regex.Pattern;
  *
  * <p>{@code releaseVersion} 在应用内单调递增；当前生效版本由仓储中的指针维护，
  * 回滚只切换指针，不改写任何快照。</p>
+ *
+ * <p>{@code remark} 为发布说明，可空；旧快照反序列化后为 null。</p>
  */
 public record SchemaSnapshot(
         String snapshotId,
@@ -20,6 +22,7 @@ public record SchemaSnapshot(
         String contentHash,
         String createdBy,
         String createdAt,
+        String remark,
         SchemaApp app) {
 
     private static final Pattern CONTENT_HASH = Pattern.compile("[0-9a-f]{64}");

@@ -131,7 +131,7 @@ class AppApiTest {
         SchemaApp published = metadataStore.findDraft(appId).orElseThrow();
         snapshotStore.append(new SchemaSnapshot(
                 "s-1", appId, published.code(), 1L, published.schemaVersion(),
-                new SchemaContentHasher().hash(published), "alice", TIMESTAMP, published));
+                new SchemaContentHasher().hash(published), "alice", TIMESTAMP, null, published));
         snapshotStore.activate(appId, "s-1");
 
         mvc.perform(get("/api/apps")

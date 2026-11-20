@@ -33,6 +33,14 @@ public final class PublishService {
     }
 
     public SchemaSnapshot publish(String appId, String operator) {
+        return publish(appId, operator, null);
+    }
+
+    /**
+     * 发布草稿并携带发布说明。内容哈希相同的重复发布直接返回当前快照，
+     * 不产生空版本，也不更新当前快照的发布说明。
+     */
+    public SchemaSnapshot publish(String appId, String operator, String remark) {
         Objects.requireNonNull(appId, "appId");
         if (operator == null || operator.isBlank()) {
             throw new IllegalArgumentException("发布人不能为空");
@@ -62,6 +70,7 @@ public final class PublishService {
                 contentHash,
                 operator,
                 Instant.now().toString(),
+                remark,
                 draft);
 
         snapshotStore.append(snapshot);

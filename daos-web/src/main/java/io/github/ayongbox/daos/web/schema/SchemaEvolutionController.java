@@ -76,9 +76,10 @@ public class SchemaEvolutionController {
     }
 
     @PostMapping("/migrations")
-    public R<MigrationRecord> apply(@PathVariable String appId) {
+    public R<MigrationRecord> apply(
+            @PathVariable String appId, @RequestBody(required = false) PublishRequest body) {
         require(appId, PUBLISH_PERMISSION);
-        return R.ok(evolutionService.apply(appId, operator()));
+        return R.ok(evolutionService.apply(appId, operator(), body == null ? null : body.remark()));
     }
 
     @PostMapping("/migrations/{migrationId}/rollback")

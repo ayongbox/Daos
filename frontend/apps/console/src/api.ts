@@ -87,6 +87,17 @@ export interface MigrationRecord {
   error?: string | null;
 }
 
+/** 发布版本视图：每次发布生成一个版本，active 为当前生效版本。 */
+export interface ReleaseView {
+  releaseVersion: number;
+  snapshotId: string;
+  contentHash: string;
+  createdBy: string;
+  createdAt: string;
+  remark: string | null;
+  active: boolean;
+}
+
 /** 表单列表项，来自应用当前生效快照。 */
 export interface FormSummary {
   formId: string;
@@ -325,14 +336,20 @@ export const api = {
     client.put<void>(`/api/apps/${appId}/schema/draft`, app),
   preview: (appId: string) =>
     client.get<MigrationPlan>(`/api/apps/${appId}/schema/migrations/preview`),
-  apply: (appId: string) =>
-    client.post<MigrationRecord>(`/api/apps/${appId}/schema/migrations`),
+  apply: (appId: string, remark?: string | null) =>
+    client.post<MigrationRecord>(`/api/apps/${appId}/schema/migrations`, {
+      remark: remark ?? null
+    }),
   history: (appId: string) =>
     client.get<MigrationRecord[]>(`/api/apps/${appId}/schema/migrations`),
   rollback: (appId: string, migrationId: string) =>
     client.post<MigrationRecord>(
       `/api/apps/${appId}/schema/migrations/${migrationId}/rollback`
     ),
+  releases: (appId: string) =>
+    client.get<ReleaseView[]>(`/api/apps/${appId}/releases`),
+  rollbackToVersion: (appId: string, releaseVersion: number) =>
+    client.post<void>(`/api/apps/${appId}/releases/${releaseVersion}/rollback`),
   forms: (appId: string) => client.get<FormSummary[]>(`/api/apps/${appId}/forms`),
   renderForm: (appId: string, formCode: string, scene = 'CREATE') =>
     client.get<FormRenderResult>(

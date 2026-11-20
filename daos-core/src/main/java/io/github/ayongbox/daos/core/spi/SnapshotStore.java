@@ -2,6 +2,7 @@ package io.github.ayongbox.daos.core.spi;
 
 import io.github.ayongbox.daos.core.snapshot.SchemaSnapshot;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -16,6 +17,11 @@ public interface SnapshotStore {
     Optional<SchemaSnapshot> findById(String snapshotId);
 
     Optional<SchemaSnapshot> findActive(String appId);
+
+    /**
+     * 应用内全部发布快照，按 {@code releaseVersion} 倒序（最新在前）；无快照时返回空列表。
+     */
+    List<SchemaSnapshot> listByApp(String appId);
 
     /**
      * 应用内最新发布版本，无任何快照时返回 0。

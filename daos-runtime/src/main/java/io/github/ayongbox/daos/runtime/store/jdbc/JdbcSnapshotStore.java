@@ -64,6 +64,15 @@ public final class JdbcSnapshotStore implements SnapshotStore {
     }
 
     @Override
+    public List<SchemaSnapshot> listByApp(String appId) {
+        return payloads(
+                "SELECT payload FROM daos_snapshot WHERE app_id = ? ORDER BY release_version DESC", appId)
+                .stream()
+                .map(payload -> codec.read(payload, SchemaSnapshot.class))
+                .toList();
+    }
+
+    @Override
     public long latestReleaseVersion(String appId) {
         Long version = jdbc.queryForObject(
                 "SELECT COALESCE(MAX(release_version), 0) FROM daos_snapshot WHERE app_id = ?",

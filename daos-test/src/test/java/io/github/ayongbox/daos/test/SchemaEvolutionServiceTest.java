@@ -154,6 +154,44 @@ class SchemaEvolutionServiceTest {
                 () -> service.rollback(APP_ID, first.id(), "tester"));
     }
 
+    @Test
+    void rollbackToRestoresEarlierVersionAcrossMultipleMigrations() {
+        metadataStore.saveDraft(app(1, List.of(titleField())));
+        MigrationRecord first = service.apply(APP_ID, "tester");
+        String v1SnapshotId = snapshotStore.findActive(APP_ID).orElseThrow().snapshotId();
+
+        metadataStore.saveDraft(app(2, List.of(titleField(), summaryField())));
+        MigrationRecord second = service.apply(APP_ID, "tester");
+        metadataStore.saveDraft(app(3, List.of(titleField(), summaryField(), ownerField())));
+        MigrationRecord third = service.apply(APP_ID, "tester");
+
+        service.rollbackTo(APP_ID, 1, "tester");
+
+        assertEquals(v1SnapshotId, snapshotStore.findActive(APP_ID).orElseThrow().snapshotId());
+        assertTrue(columnExists("title"));
+        assertFalse(columnExists("summary"));
+        assertFalse(columnExists("owner"));
+        assertEquals(MigrationStatus.APPLIED, migrationStore.findById(first.id())
+                .orElseThrow().status());
+        assertEquals(MigrationStatus.ROLLED_BACK, migrationStore.findById(second.id())
+                .orElseThrow().status());
+        assertEquals(MigrationStatus.ROLLED_BACK, migrationStore.findById(third.id())
+                .orElseThrow().status());
+    }
+
+    @Test
+    void rollbackToRejectsActiveAndMissingVersions() {
+        metadataStore.saveDraft(app(1, List.of(titleField())));
+        service.apply(APP_ID, "tester");
+        metadataStore.saveDraft(app(2, List.of(titleField(), summaryField())));
+        service.apply(APP_ID, "tester");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.rollbackTo(APP_ID, 2, "tester"));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.rollbackTo(APP_ID, 99, "tester"));
+    }
+
     private int countRows() {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.createStatement();

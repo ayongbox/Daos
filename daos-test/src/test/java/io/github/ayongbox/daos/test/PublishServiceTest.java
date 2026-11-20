@@ -153,7 +153,7 @@ class PublishServiceTest {
 
     private static SchemaSnapshot snapshot(long releaseVersion, SchemaApp app) {
         return new SchemaSnapshot(Ids.ulid(), APP_ID, "demo", releaseVersion, 1,
-                "a".repeat(64), "tester", TIMESTAMP, app);
+                "a".repeat(64), "tester", TIMESTAMP, null, app);
     }
 
     private static SchemaApp appWithTimestamp(String timestamp) {

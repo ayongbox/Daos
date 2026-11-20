@@ -223,7 +223,7 @@ class JdbcStorePersistenceTest {
     private static SchemaSnapshot snapshot(String id, long releaseVersion, SchemaApp app) {
         return new SchemaSnapshot(
                 id, app.id(), app.code(), releaseVersion, app.schemaVersion(),
-                "a".repeat(64), "tester", TIMESTAMP, app);
+                "a".repeat(64), "tester", TIMESTAMP, null, app);
     }
 
     private static AuditEvent event(
