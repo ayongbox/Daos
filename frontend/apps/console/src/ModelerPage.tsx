@@ -1363,7 +1363,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         okText="创建"
         cancelText="取消"
         width={480}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={appForm}
@@ -1388,7 +1388,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         open={tableModal !== null}
         onCancel={() => setTableModal(null)}
         onOk={() => tableForm.submit()}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={tableForm} layout="vertical" onFinish={submitTable}>
           <Form.Item
@@ -1418,7 +1418,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         width="min(480px, calc(100vw - 48px))"
         open={fieldModal !== null}
         onClose={closeFieldDrawer}
-        destroyOnClose
+        destroyOnHidden
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button onClick={closeFieldDrawer}>取消</Button>
@@ -1625,7 +1625,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         open={indexModal}
         onCancel={() => setIndexModal(false)}
         onOk={() => indexForm.submit()}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={indexForm} layout="vertical" onFinish={submitIndex}>
           <Form.Item
@@ -1655,7 +1655,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         open={relationModal}
         onCancel={() => setRelationModal(false)}
         onOk={() => relationForm.submit()}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={relationForm} layout="vertical" onFinish={submitRelation}>
           <Form.Item name="code" label="关联编码" rules={[{ required: true, pattern: CODE_PATTERN }]}>

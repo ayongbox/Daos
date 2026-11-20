@@ -1162,7 +1162,7 @@ export function FormDesigner({
           </Button>
         }
         width={920}
-        destroyOnClose
+        destroyOnHidden
       >
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           <Space style={{ width: '100%', justifyContent: 'space-between' }}>
@@ -1336,7 +1336,7 @@ export function FormDesigner({
         onOk={() => createFormInstance.submit()}
         okText="创建"
         cancelText="取消"
-        destroyOnClose
+        destroyOnHidden
         width={440}
       >
         <Form form={createFormInstance} layout="vertical" onFinish={submitCreate}>
@@ -1377,7 +1377,7 @@ export function FormDesigner({
         onOk={() => subformFormInstance.submit()}
         okText="添加"
         cancelText="取消"
-        destroyOnClose
+        destroyOnHidden
         width={520}
       >
         <Form form={subformFormInstance} layout="vertical" onFinish={submitSubform}>

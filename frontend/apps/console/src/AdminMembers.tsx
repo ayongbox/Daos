@@ -177,7 +177,7 @@ export function AdminMembers() {
         okText="保存"
         cancelText="取消"
         confirmLoading={saving}
-        destroyOnClose
+        destroyOnHidden
         width={480}
       >
         <Form form={memberForm} layout="vertical" onFinish={submitMember}>

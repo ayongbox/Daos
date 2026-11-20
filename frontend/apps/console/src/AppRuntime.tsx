@@ -1030,7 +1030,7 @@ export function AppRuntime({
         open={viewer !== null}
         title="记录详情"
         onClose={() => setViewer(null)}
-        destroyOnClose
+        destroyOnHidden
         extra={
           viewer ? (
             <Button
@@ -1060,7 +1060,7 @@ export function AppRuntime({
         open={editor !== null}
         title={editor?.recordId ? '编辑记录' : '新建记录'}
         onClose={() => setEditor(null)}
-        destroyOnClose
+        destroyOnHidden
       >
         {editor ? (
           <FormRuntime

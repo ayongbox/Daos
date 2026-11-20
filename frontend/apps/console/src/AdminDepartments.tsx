@@ -216,7 +216,7 @@ export function AdminDepartments() {
         okText="保存"
         cancelText="取消"
         confirmLoading={saving}
-        destroyOnClose
+        destroyOnHidden
         width={420}
       >
         <Form form={deptForm} layout="vertical" onFinish={submitDept}>

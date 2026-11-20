@@ -174,7 +174,7 @@ export function AppWorkbench({
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Card
-        bodyStyle={{ padding: 24 }}
+        styles={{ body: { padding: 24 } }}
         style={{
           background: `linear-gradient(120deg, ${tokens.colorPrimaryBg} 0%, ${tokens.colorBgContainer} 70%)`,
           border: `1px solid ${tokens.colorBorder}`
@@ -233,7 +233,7 @@ export function AppWorkbench({
             hoverable
             size="small"
             onClick={() => onOpenCapability(stat.key)}
-            bodyStyle={{ padding: '14px 16px' }}
+            styles={{ body: { padding: '14px 16px' } }}
           >
             <Typography.Text type="secondary" style={{ fontSize: tokens.fontSizeSm }}>
               {stat.label}
@@ -264,7 +264,7 @@ export function AppWorkbench({
               管理页面
             </Button>
           }
-          bodyStyle={{ padding: menus.length === 0 ? 24 : 12 }}
+          styles={{ body: { padding: menus.length === 0 ? 24 : 12 } }}
         >
           {menus.length === 0 ? (
             <Empty
@@ -329,7 +329,7 @@ export function AppWorkbench({
               数据建模
             </Button>
           }
-          bodyStyle={{ padding: tables.length === 0 ? 24 : '4px 12px' }}
+          styles={{ body: { padding: tables.length === 0 ? 24 : '4px 12px' } }}
         >
           {tables.length === 0 ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有数据表" />

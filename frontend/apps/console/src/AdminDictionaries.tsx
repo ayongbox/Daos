@@ -311,7 +311,7 @@ export function AdminDictionaries() {
                 新建
               </Button>
             }
-            bodyStyle={{ padding: dictionaries.length === 0 ? 24 : '4px 8px' }}
+            styles={{ body: { padding: dictionaries.length === 0 ? 24 : '4px 8px' } }}
           >
             <Spin spinning={loading}>
               {dictionaries.length === 0 ? (

@@ -188,7 +188,7 @@ export function PageDesigner({
           </Button>
         }
         style={{ width: 280, flex: '0 0 280px' }}
-        bodyStyle={{ padding: pages.length === 0 ? 24 : 8 }}
+        styles={{ body: { padding: pages.length === 0 ? 24 : 8 } }}
       >
         {pages.length === 0 ? (
           <Empty
@@ -539,7 +539,7 @@ export function PageDesigner({
         cancelText="取消"
         onCancel={() => setCreateOpen(false)}
         onOk={() => createForm.submit()}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={createForm} layout="vertical" onFinish={createPage}>
           <Form.Item
