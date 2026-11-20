@@ -46,7 +46,7 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
               height: 40,
               borderRadius: tokens.radiusMd,
               background: tokens.colorPrimary,
-              color: '#FFFFFF',
+              color: tokens.colorTextInverse,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

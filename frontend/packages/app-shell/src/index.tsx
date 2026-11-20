@@ -37,6 +37,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
           borderRadius: tokens.radiusSm,
           borderRadiusLG: tokens.radiusMd,
           borderRadiusSM: 4,
+          colorTextLightSolid: tokens.colorTextInverse,
           fontSize: tokens.fontSizeMd,
           fontSizeSM: tokens.fontSizeSm,
           fontSizeHeading3: tokens.fontSizeHeading,

@@ -883,7 +883,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
             height: 28,
             borderRadius: tokens.radiusSm,
             background: tokens.colorPrimary,
-            color: '#FFFFFF',
+            color: tokens.colorTextInverse,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
