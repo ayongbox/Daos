@@ -10,7 +10,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Layout,
   List,
   Modal,
   Popconfirm,
@@ -25,6 +24,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { tokens } from '@daos/ui';
+import { AppShell, type AppNavNode } from '@daos/app-shell';
 import { ApiError } from '@daos/sdk';
 import { FIELD_TYPE_LABELS } from '@daos/metadata';
 import type {
@@ -47,32 +47,105 @@ import {
   type MigrationPlan,
   type MigrationRecord
 } from './api';
-import { AdminPage } from './AdminPage';
+import { AdminDepartments } from './AdminDepartments';
+import { AdminDictionaries } from './AdminDictionaries';
+import { AdminMembers } from './AdminMembers';
 import { AppIcon, AppIconPicker } from './appIcons';
 import { AppRuntime } from './AppRuntime';
 import { AppWorkbench } from './AppWorkbench';
 import { FormDesigner } from './FormDesigner';
 import { PageDesigner } from './PageDesigner';
+import { ReleasePanel } from './ReleasePanel';
 import { ViewDesigner } from './ViewDesigner';
 import { scaffoldTablePage } from './pageScaffold';
 
 const CODE_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
-const { Header, Sider, Content } = Layout;
 
-/** 应用内能力导航。未开发的能力只做占位，不提供点击行为。 */
-const APP_NAV_ITEMS = [
-  { key: 'home', label: '工作台', ready: true },
-  { key: 'model', label: '数据建模', ready: true },
-  { key: 'form', label: '表单设计', ready: true },
-  { key: 'view', label: '视图与报表', ready: true },
-  { key: 'page', label: '页面', ready: true },
-  { key: 'runtime', label: '预览与运行', ready: true },
-  { key: 'flow', label: '流程设计', ready: false },
-  { key: 'member', label: '权限与成员', ready: false },
-  { key: 'setting', label: '应用设置', ready: false }
-] as const;
+/**
+ * 全局导航树：顶部全局栏展示六个顶层模块，左侧应用导航展示完整分组树，两处联动切换。
+ * 未开发的能力保留「规划中」占位，不提供点击行为。
+ */
+const NAV_ITEMS: AppNavNode[] = [
+  {
+    key: 'app-center',
+    label: '应用中心',
+    children: [
+      { key: 'apps', label: '应用列表' },
+      { key: 'home', label: '工作台' },
+      { key: 'app-perm', label: '权限与成员', ready: false },
+      { key: 'app-setting', label: '应用设置', ready: false }
+    ]
+  },
+  {
+    key: 'data',
+    label: '数据管理',
+    children: [{ key: 'model', label: '数据建模' }]
+  },
+  {
+    key: 'design',
+    label: '应用设计',
+    children: [
+      { key: 'form', label: '表单设计' },
+      { key: 'view', label: '视图与报表' },
+      { key: 'page', label: '页面' }
+    ]
+  },
+  {
+    key: 'automation',
+    label: '逻辑与自动化',
+    children: [{ key: 'flow', label: '流程设计', ready: false }]
+  },
+  {
+    key: 'release-run',
+    label: '发布与运行',
+    children: [
+      { key: 'runtime', label: '预览与运行' },
+      { key: 'release', label: '版本与发布' }
+    ]
+  },
+  {
+    key: 'platform',
+    label: '平台管理',
+    children: [
+      { key: 'admin-members', label: '用户管理' },
+      { key: 'admin-departments', label: '组织管理' },
+      { key: 'admin-dictionaries', label: '字典管理' }
+    ]
+  }
+];
 
-type Capability = 'home' | 'model' | 'form' | 'view' | 'page' | 'runtime';
+type NavKey =
+  | 'apps'
+  | 'home'
+  | 'model'
+  | 'form'
+  | 'view'
+  | 'page'
+  | 'runtime'
+  | 'release'
+  | 'admin-members'
+  | 'admin-departments'
+  | 'admin-dictionaries';
+
+/** 需要先选择应用才能进入的导航项。 */
+const APP_SCOPED_KEYS = new Set<NavKey>(['home', 'model', 'form', 'view', 'page', 'runtime', 'release']);
+
+const NAV_LABELS: Record<NavKey, string> = {
+  apps: '应用列表',
+  home: '工作台',
+  model: '数据建模',
+  form: '表单设计',
+  view: '视图与报表',
+  page: '页面',
+  runtime: '预览与运行',
+  release: '版本与发布',
+  'admin-members': '用户管理',
+  'admin-departments': '组织管理',
+  'admin-dictionaries': '字典管理'
+};
+
+/** 展示草稿操作按钮（预览迁移/迁移历史/保存草稿/发布）的导航项。 */
+const DRAFT_ACTION_KEYS = new Set<NavKey>(['home', 'model', 'form', 'view', 'page', 'release']);
 
 function newId(): string {
   const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -92,6 +165,28 @@ function newId(): string {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+/** 底部状态区的即时草稿体检：编码重复、空表等结构问题，不替代迁移预览。 */
+function validateDraft(app: SchemaApp): string[] {
+  const issues: string[] = [];
+  const tableCodes = new Map<string, number>();
+  for (const table of app.tables) {
+    tableCodes.set(table.code, (tableCodes.get(table.code) ?? 0) + 1);
+    const fields = table.fields.filter((field) => !field.deleted);
+    if (fields.length === 0) issues.push(`「${table.displayName}」没有字段`);
+    const fieldCodes = new Map<string, number>();
+    for (const field of fields) {
+      fieldCodes.set(field.code, (fieldCodes.get(field.code) ?? 0) + 1);
+    }
+    for (const [code, count] of fieldCodes) {
+      if (count > 1) issues.push(`「${table.displayName}」字段编码重复：${code}`);
+    }
+  }
+  for (const [code, count] of tableCodes) {
+    if (count > 1) issues.push(`数据表编码重复：${code}`);
+  }
+  return issues;
 }
 
 function newTable(appId: string, code: string, displayName: string, sortOrder: number): SchemaTable {
@@ -247,8 +342,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
   const { message, modal } = AntApp.useApp();
   const [apps, setApps] = useState<AppSummary[]>([]);
   const [appId, setAppId] = useState<string | null>(null);
-  const [capability, setCapability] = useState<Capability>('home');
-  const [adminOpen, setAdminOpen] = useState(false);
+  const [selectedKey, setSelectedKey] = useState<NavKey>('apps');
   const [runtimeMenuId, setRuntimeMenuId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SchemaApp | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -342,7 +436,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
     if (dirty && !window.confirm('当前草稿未保存，确认离开？')) return;
     if (nextAppId === null) refreshApps();
     setRuntimeMenuId(null);
-    setCapability('home');
+    setSelectedKey(nextAppId === null ? 'apps' : 'home');
     setAppId(nextAppId);
   }
 
@@ -496,7 +590,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
       content: `已生成${created.join('、')}。保存草稿并发布后可在运行端查看。`,
       okText: '查看页面',
       cancelText: '继续建模',
-      onOk: () => setCapability('page')
+      onOk: () => setSelectedKey('page')
     });
   }
 
@@ -860,149 +954,132 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
     ...apps.map((app) => ({ value: app.id, label: app.displayName }))
   ];
 
-  // 管理后台与控制台同级切换：进入后整页展示，返回时控制台草稿状态保持不变
-  if (adminOpen) {
-    return <AdminPage onBack={() => setAdminOpen(false)} />;
-  }
+  // 管理后台已并入「平台管理」模块；进入模块只切换内容，草稿状态保持不变
+  const nav: AppNavNode[] = NAV_ITEMS.map((group) => ({
+    ...group,
+    children: group.children?.map((item) =>
+      APP_SCOPED_KEYS.has(item.key as NavKey) && appId === null ? { ...item, disabled: true } : item
+    )
+  }));
+  const summary = apps.find((app) => app.id === appId) ?? null;
+  const issues = draft ? validateDraft(draft) : [];
 
   return (
-    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
-      <Header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '0 16px',
-          background: tokens.colorBgContainer,
-          borderBottom: `1px solid ${tokens.colorBorder}`
-        }}
-      >
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: tokens.radiusSm,
-            background: tokens.colorPrimary,
-            color: tokens.colorTextInverse,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 15,
-            fontWeight: 600
-          }}
-        >
-          道
-        </div>
-        <Typography.Text strong style={{ fontSize: tokens.fontSizeLg }}>
-          道生
-        </Typography.Text>
-        <Divider type="vertical" style={{ margin: 0 }} />
-        {apps.length > 0 ? (
-          <Select
-            variant="borderless"
-            value={appId ?? 'gallery'}
-            options={appOptions}
-            style={{ width: 180 }}
-            onChange={(value) => switchApp(value === 'gallery' ? null : value)}
-          />
-        ) : (
-          <Typography.Text type="secondary">控制台</Typography.Text>
-        )}
-        <div style={{ flex: 1 }} />
-        {dirty ? (
-          <Tag color="orange" style={{ marginInlineEnd: 0 }}>
-            未保存
-          </Tag>
-        ) : null}
-        <Button type="text" onClick={() => setAdminOpen(true)}>
-          管理后台
-        </Button>
-        <Button type="text" onClick={onLogout}>
-          退出
-        </Button>
-      </Header>
-
-      <Layout>
-        <Sider
-          theme="light"
-          width={tokens.siderWidth}
-          style={{ borderRight: `1px solid ${tokens.colorBorder}`, overflow: 'auto' }}
-        >
-          <div style={{ padding: '16px 20px 8px', color: tokens.colorTextTertiary, fontSize: tokens.fontSizeSm }}>
-            应用
-          </div>
+    <AppShell
+      title={
+        <Space size={8}>
           <div
-            onClick={() => switchApp(null)}
             style={{
+              width: 28,
+              height: 28,
+              borderRadius: tokens.radiusSm,
+              background: tokens.colorPrimary,
+              color: tokens.colorTextInverse,
               display: 'flex',
               alignItems: 'center',
-              height: 36,
-              margin: '2px 8px',
-              padding: '0 10px',
-              borderRadius: tokens.radiusSm,
-              cursor: appId ? 'pointer' : 'default',
-              background: appId ? undefined : tokens.colorPrimaryBg,
-              color: appId ? tokens.colorTextPrimary : tokens.colorPrimary,
-              fontSize: tokens.fontSizeMd
+              justifyContent: 'center',
+              fontSize: 15,
+              fontWeight: 600
             }}
           >
-            应用列表
+            道
           </div>
-          <Divider style={{ margin: '12px 0' }} />
-          <div style={{ padding: '0 20px 8px', color: tokens.colorTextTertiary, fontSize: tokens.fontSizeSm }}>
-            应用能力
-          </div>
-          {APP_NAV_ITEMS.map((item) => {
-            const enabled = appId !== null && item.ready;
-            const active = appId !== null && item.key === capability;
-            return (
-              <div
-                key={item.key}
-                onClick={() => {
-                  if (enabled) setCapability(item.key as Capability);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  height: 36,
-                  margin: '2px 8px',
-                  padding: '0 10px',
-                  borderRadius: tokens.radiusSm,
-                  cursor: enabled ? 'pointer' : 'default',
-                  background: active ? tokens.colorPrimaryBg : undefined,
-                  color: active
-                    ? tokens.colorPrimary
-                    : enabled
-                      ? tokens.colorTextPrimary
-                      : tokens.colorTextDisabled,
-                  fontSize: tokens.fontSizeMd
-                }}
-              >
-                <span>{item.label}</span>
-                {item.ready ? null : (
-                  <span style={{ fontSize: 11, color: tokens.colorTextTertiary }}>规划中</span>
-                )}
-              </div>
-            );
-          })}
-        </Sider>
-
-        <Content style={{ padding: 16, overflow: 'auto', minWidth: 0 }}>
-          {!appId ? (
-            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-                <div>
-                  <Typography.Title level={4} style={{ margin: 0, fontSize: tokens.fontSizeHeading }}>
-                    我的应用
-                  </Typography.Title>
-                  <Typography.Text type="secondary">
-                    共 {apps.length} 个应用，选择应用进入数据建模
-                  </Typography.Text>
-                </div>
-                <Button type="primary" onClick={() => setAppModal(true)}>
-                  新建应用
+          <Typography.Text strong style={{ fontSize: tokens.fontSizeLg }}>
+            道生
+          </Typography.Text>
+        </Space>
+      }
+      nav={nav}
+      selectedKey={selectedKey}
+      onSelect={(key) => {
+        if (dirty && !window.confirm('当前草稿未保存，确认离开？')) return;
+        setSelectedKey(key as NavKey);
+      }}
+      headerExtra={
+        <Space size={8}>
+          {apps.length > 0 ? (
+            <Select
+              variant="borderless"
+              value={appId ?? 'gallery'}
+              options={appOptions}
+              style={{ width: 180 }}
+              onChange={(value) => switchApp(value === 'gallery' ? null : value)}
+            />
+          ) : (
+            <Typography.Text type="secondary">控制台</Typography.Text>
+          )}
+          <Divider type="vertical" style={{ margin: 0 }} />
+          <Button type="text" onClick={onLogout}>
+            退出
+          </Button>
+        </Space>
+      }
+      toolbar={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+          <Typography.Text strong>{NAV_LABELS[selectedKey]}</Typography.Text>
+          <div style={{ flex: 1 }} />
+          {selectedKey === 'apps' ? (
+            <Button type="primary" onClick={() => setAppModal(true)}>
+              新建应用
+            </Button>
+          ) : appId && draft && DRAFT_ACTION_KEYS.has(selectedKey) ? (
+            <Space size={8} wrap>
+              <Button type="text" onClick={openPreview}>
+                预览迁移
+              </Button>
+              <Button type="text" onClick={openHistory}>
+                迁移历史
+              </Button>
+              <Button onClick={saveDraft} disabled={!dirty} loading={loading}>
+                保存草稿
+              </Button>
+              <Tooltip title={dirty ? '请先保存草稿' : undefined}>
+                <Button type="primary" onClick={publish} disabled={dirty}>
+                  发布
                 </Button>
+              </Tooltip>
+            </Space>
+          ) : null}
+        </div>
+      }
+      status={
+        appId && draft ? (
+          <>
+            <span>
+              保存状态：
+              <span style={{ color: dirty ? tokens.colorWarning : tokens.colorSuccess }}>
+                {dirty ? '未保存' : '已保存'}
+              </span>
+            </span>
+            <Divider type="vertical" style={{ margin: 0 }} />
+            <Tooltip title={issues.length > 0 ? issues.join('；') : undefined}>
+              <span>
+                校验：
+                <span style={{ color: issues.length === 0 ? tokens.colorSuccess : tokens.colorWarning }}>
+                  {issues.length === 0 ? '通过' : `${issues.length} 个问题`}
+                </span>
+              </span>
+            </Tooltip>
+            <Divider type="vertical" style={{ margin: 0 }} />
+            <span>
+              版本：
+              <span style={{ color: tokens.colorTextPrimary }}>
+                {summary && summary.activeReleaseVersion > 0 ? `v${summary.activeReleaseVersion}` : '未发布'}
+              </span>
+            </span>
+          </>
+        ) : undefined
+      }
+    >
+      {selectedKey === 'apps' ? (
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <div>
+                <Typography.Title level={4} style={{ margin: 0, fontSize: tokens.fontSizeHeading }}>
+                  我的应用
+                </Typography.Title>
+                <Typography.Text type="secondary">
+                  共 {apps.length} 个应用，选择应用进入数据建模
+                </Typography.Text>
               </div>
               {apps.length === 0 ? (
                 <Card>
@@ -1092,67 +1169,29 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                 </div>
               )}
             </Space>
+          ) : selectedKey === 'admin-members' ? (
+            <AdminMembers />
+          ) : selectedKey === 'admin-departments' ? (
+            <AdminDepartments />
+          ) : selectedKey === 'admin-dictionaries' ? (
+            <AdminDictionaries />
           ) : !draft ? (
             <Card loading />
-          ) : (
-            <Space direction="vertical" style={{ width: '100%' }} size={16}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: 8,
-                  padding: '10px 16px',
-                  background: tokens.colorBgContainer,
-                  borderRadius: tokens.radiusMd
-                }}
-              >
-                <Space size={8}>
-                  <AppIcon icon={draft.icon} name={draft.displayName} size={28} />
-                  <Typography.Text strong style={{ fontSize: 15 }}>
-                    {draft.displayName}
-                  </Typography.Text>
-                  <Typography.Text type="secondary" style={{ fontSize: tokens.fontSizeSm }}>
-                    {draft.tables.length} 张表
-                  </Typography.Text>
-                </Space>
-                {capability === 'runtime' ? null : (
-                  <Space size={8} wrap>
-                    <Button type="text" onClick={openPreview}>
-                      预览迁移
-                    </Button>
-                    <Button type="text" onClick={openHistory}>
-                      迁移历史
-                    </Button>
-                    <Button onClick={saveDraft} disabled={!dirty} loading={loading}>
-                      保存草稿
-                    </Button>
-                    <Tooltip title={dirty ? '请先保存草稿' : undefined}>
-                      <Button type="primary" onClick={publish} disabled={dirty}>
-                        发布
-                      </Button>
-                    </Tooltip>
-                  </Space>
-                )}
-              </div>
-
-              {capability === 'home' ? (
+          ) : selectedKey === 'home' ? (
                 <AppWorkbench
                   app={draft}
-                  summary={apps.find((app) => app.id === appId) ?? null}
-                  onOpenCapability={setCapability}
+                  summary={summary}
+                  onOpenCapability={(next) => setSelectedKey(next)}
                   onOpenPage={(menuId) => {
                     setRuntimeMenuId(menuId);
-                    setCapability('runtime');
+                    setSelectedKey('runtime');
                   }}
                   onOpenTable={(tableId) => {
                     setSelectedTableId(tableId);
-                    setCapability('model');
+                    setSelectedKey('model');
                   }}
-                  onRefreshSummary={refreshApps}
                 />
-              ) : capability === 'form' ? (
+              ) : selectedKey === 'form' ? (
                 <FormDesigner
                   draft={draft}
                   onChange={(forms) => {
@@ -1164,7 +1203,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                     setDirty(true);
                   }}
                 />
-              ) : capability === 'view' ? (
+              ) : selectedKey === 'view' ? (
                 <ViewDesigner
                   app={draft}
                   onChange={(next) => {
@@ -1172,7 +1211,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                     setDirty(true);
                   }}
                 />
-              ) : capability === 'page' ? (
+              ) : selectedKey === 'page' ? (
                 <PageDesigner
                   app={draft}
                   onChange={(next) => {
@@ -1180,8 +1219,11 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                     setDirty(true);
                   }}
                 />
-              ) : capability === 'runtime' ? (
-                <AppRuntime appId={appId} draft={draft} initialMenuId={runtimeMenuId} />
+              ) : selectedKey === 'runtime' ? (
+                /* 走到这里的前提是 draft 已按 appId 加载，二者生命周期一致 */
+                <AppRuntime appId={appId!} draft={draft} initialMenuId={runtimeMenuId} />
+              ) : selectedKey === 'release' ? (
+                <ReleasePanel app={draft} summary={summary} onRefreshSummary={refreshApps} />
               ) : (
                 <div
                   style={{
@@ -1350,10 +1392,6 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                   )}
                 </div>
               )}
-            </Space>
-          )}
-        </Content>
-      </Layout>
 
       <Modal
         title="新建应用"
@@ -1756,6 +1794,6 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
           ]}
         />
       </Drawer>
-    </Layout>
+    </AppShell>
   );
 }

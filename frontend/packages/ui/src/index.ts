@@ -28,6 +28,7 @@ export const tokens = {
   controlHeight: 36,
   headerHeight: 56,
   toolbarHeight: 48,
+  statusBarHeight: 32,
   siderWidth: 240,
   fontFamily: '-apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
   shadowSecondary: '0 2px 8px rgba(31,35,41,0.08)'
