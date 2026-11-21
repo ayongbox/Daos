@@ -1,6 +1,6 @@
 import { createApiClient } from '@daos/sdk';
 import type { FieldConfig, FieldLogicalType, SchemaApp } from '@daos/metadata';
-import type { RenderNode, RenderTree } from '@daos/renderer';
+import type { RelationOption, RenderNode, RenderTree } from '@daos/renderer';
 import type { PageLayout } from './pageLayout';
 
 const TOKEN_KEY = 'daos.token';
@@ -103,7 +103,7 @@ export interface FormSummary {
   formType: string;
 }
 
-export type { RenderNode, RenderTree };
+export type { RelationOption, RenderNode, RenderTree };
 
 export interface FormRenderResult {
   formId: string;
@@ -121,11 +121,6 @@ export interface RecordPage {
   current: number;
   size: number;
   records: Record<string, unknown>[];
-}
-
-export interface RelationOption {
-  value: string;
-  label: string;
 }
 
 /** 主表值 + 按子表单表单项 id 分组的子表行。 */

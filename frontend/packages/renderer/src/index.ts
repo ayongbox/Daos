@@ -1,6 +1,7 @@
 import type { FormComponent, FormScene, LinkageRule, SchemaForm } from '@daos/metadata';
 
 export * from './registry';
+export * from './controls';
 
 export interface RenderContext {
   scene: FormScene;
@@ -40,3 +41,9 @@ export interface RenderTree {
  * 渲染器只消费渲染树，不读取设计器状态、不感知编辑模式。
  */
 export type RenderTreeFactory = (form: SchemaForm, context: RenderContext) => RenderTree;
+
+/** 关联记录选项。 */
+export interface RelationOption {
+  value: string;
+  label: string;
+}
