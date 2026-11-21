@@ -7,7 +7,9 @@ import type { RenderTree } from '@daos/renderer';
 const placeholderTree: RenderTree = {
   formId: '',
   scene: 'VIEW',
-  nodes: []
+  schemaVersion: 0,
+  nodes: [],
+  props: {}
 };
 
 function App() {

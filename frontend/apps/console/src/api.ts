@@ -1,11 +1,6 @@
 import { createApiClient } from '@daos/sdk';
-import type {
-  FieldConfig,
-  FieldLogicalType,
-  FormComponent,
-  LinkageRule,
-  SchemaApp
-} from '@daos/metadata';
+import type { FieldConfig, FieldLogicalType, SchemaApp } from '@daos/metadata';
+import type { RenderNode, RenderTree } from '@daos/renderer';
 import type { PageLayout } from './pageLayout';
 
 const TOKEN_KEY = 'daos.token';
@@ -108,28 +103,7 @@ export interface FormSummary {
   formType: string;
 }
 
-export interface RenderNode {
-  id: string;
-  component: FormComponent;
-  fieldCode?: string | null;
-  label?: string | null;
-  span: number;
-  readonly: boolean;
-  required: boolean;
-  hidden: boolean;
-  props: Record<string, unknown>;
-  children: RenderNode[];
-}
-
-export interface RenderTree {
-  formId: string;
-  scene: 'CREATE' | 'EDIT' | 'VIEW';
-  schemaVersion: number;
-  nodes: RenderNode[];
-  props: {
-    linkages?: LinkageRule[];
-  };
-}
+export type { RenderNode, RenderTree };
 
 export interface FormRenderResult {
   formId: string;

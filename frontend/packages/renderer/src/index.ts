@@ -1,4 +1,4 @@
-import type { FormScene, SchemaForm } from '@daos/metadata';
+import type { FormComponent, FormScene, LinkageRule, SchemaForm } from '@daos/metadata';
 
 export interface RenderContext {
   scene: FormScene;
@@ -6,18 +6,32 @@ export interface RenderContext {
   readonly: boolean;
 }
 
+/**
+ * 渲染树节点：以后端 DefaultRenderCompiler 编译产物为唯一契约，
+ * 控制台表单/页面运行时与独立运行时均消费此形状。
+ */
 export interface RenderNode {
   id: string;
-  component: string;
-  fieldCode?: string;
+  component: FormComponent;
+  fieldCode?: string | null;
+  label?: string | null;
+  span: number;
+  readonly: boolean;
+  required: boolean;
+  hidden: boolean;
   props: Record<string, unknown>;
   children: RenderNode[];
 }
 
+/** 渲染树：scene 与 schemaVersion 标记编译基线，props.linkages 携带联动规则。 */
 export interface RenderTree {
   formId: string;
   scene: FormScene;
+  schemaVersion: number;
   nodes: RenderNode[];
+  props: {
+    linkages?: LinkageRule[];
+  };
 }
 
 /**

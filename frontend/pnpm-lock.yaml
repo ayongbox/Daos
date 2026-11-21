@@ -32,6 +32,9 @@ importers:
       '@daos/metadata':
         specifier: workspace:*
         version: link:../../packages/metadata
+      '@daos/renderer':
+        specifier: workspace:*
+        version: link:../../packages/renderer
       '@daos/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk

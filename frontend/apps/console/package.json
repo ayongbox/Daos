@@ -13,6 +13,7 @@
     "@daos/app-shell": "workspace:*",
     "@daos/designer": "workspace:*",
     "@daos/metadata": "workspace:*",
+    "@daos/renderer": "workspace:*",
     "@daos/sdk": "workspace:*",
     "@daos/ui": "workspace:*",
     "antd": "^5.21.6",
