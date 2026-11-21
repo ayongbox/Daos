@@ -61,17 +61,19 @@ function LockGlyph() {
   );
 }
 
-/** 状态视图统一版式：轻量图标 + 标题 + 一句描述 + 操作区。 */
+/** 状态视图统一版式：轻量图标 + 标题 + 一句描述 + 操作区；compact 用于卡片内嵌场景。 */
 function StateView({
   icon,
   title,
   description,
-  action
+  action,
+  compact = false
 }: {
   icon: ReactNode;
   title: string;
   description?: ReactNode;
   action?: ReactNode;
+  compact?: boolean;
 }) {
   return (
     <div
@@ -80,8 +82,8 @@ function StateView({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 12,
-        padding: '48px 24px',
+        gap: compact ? 8 : 12,
+        padding: compact ? '24px 16px' : '48px 24px',
         textAlign: 'center'
       }}
     >
@@ -198,12 +200,15 @@ export interface EmptyStateProps {
   description?: ReactNode;
   /** 操作区（如「新建」按钮），由调用方传入以复用 antd 按钮。 */
   action?: ReactNode;
+  /** 紧凑版式：用于卡片内嵌空态。 */
+  compact?: boolean;
 }
 
 /** 空态：轻量图标 + 一句引导 + 操作，不使用大面积色块。 */
-export function EmptyState({ title = '暂无数据', description, action }: EmptyStateProps) {
+export function EmptyState({ title = '暂无数据', description, action, compact = false }: EmptyStateProps) {
   return (
     <StateView
+      compact={compact}
       icon={
         <StateIcon>
           <EmptyGlyph />

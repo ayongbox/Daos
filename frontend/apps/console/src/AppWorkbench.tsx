@@ -1,5 +1,5 @@
-import { Button, Card, Empty, Space, Tag, Typography } from 'antd';
-import { tokens } from '@daos/ui';
+import { Button, Card, Space, Tag, Typography } from 'antd';
+import { EmptyState, tokens } from '@daos/ui';
 import type { SchemaApp, SchemaMenu } from '@daos/metadata';
 import type { AppSummary } from './api';
 import { AppIcon } from './appIcons';
@@ -134,14 +134,16 @@ export function AppWorkbench({
           styles={{ body: { padding: menus.length === 0 ? 24 : 12 } }}
         >
           {menus.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="还没有页面，从数据表一键生成"
-            >
-              <Button size="small" type="primary" onClick={() => onOpenCapability('page')}>
-                去生成页面
-              </Button>
-            </Empty>
+            <EmptyState
+              compact
+              title="还没有页面"
+              description="从数据表一键生成。"
+              action={
+                <Button size="small" type="primary" onClick={() => onOpenCapability('page')}>
+                  去生成页面
+                </Button>
+              }
+            />
           ) : (
             <div
               style={{
@@ -199,7 +201,7 @@ export function AppWorkbench({
           styles={{ body: { padding: tables.length === 0 ? 24 : '4px 12px' } }}
         >
           {tables.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有数据表" />
+            <EmptyState compact title="还没有数据表" description="先在数据建模中创建数据表。" />
           ) : (
             <Space direction="vertical" size={0} style={{ width: '100%' }}>
               {tables.map((table) => (

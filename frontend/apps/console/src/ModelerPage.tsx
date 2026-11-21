@@ -23,7 +23,7 @@ import {
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { tokens } from '@daos/ui';
+import { EmptyState, SkeletonCard, tokens } from '@daos/ui';
 import { AppShell, type AppNavNode } from '@daos/app-shell';
 import { ApiError } from '@daos/sdk';
 import { FIELD_TYPE_LABELS } from '@daos/metadata';
@@ -1087,7 +1087,15 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
               </div>
               {apps.length === 0 ? (
                 <Card>
-                  <Empty description="还没有应用，先创建一个" />
+                  <EmptyState
+                    title="还没有应用"
+                    description="先创建一个应用，再进行数据建模。"
+                    action={
+                      <Button type="primary" onClick={() => setAppModal(true)}>
+                        新建应用
+                      </Button>
+                    }
+                  />
                 </Card>
               ) : (
                 <div
@@ -1182,7 +1190,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
           ) : selectedKey === 'components' ? (
             <ComponentGallery />
           ) : !draft ? (
-            <Card loading />
+            <SkeletonCard rows={4} />
           ) : selectedKey === 'home' ? (
                 <AppWorkbench
                   app={draft}
