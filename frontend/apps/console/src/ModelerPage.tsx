@@ -53,6 +53,7 @@ import { AdminMembers } from './AdminMembers';
 import { AppIcon, AppIconPicker } from './appIcons';
 import { AppRuntime } from './AppRuntime';
 import { AppWorkbench } from './AppWorkbench';
+import { ComponentGallery } from './ComponentGallery';
 import { FormDesigner } from './FormDesigner';
 import { PageDesigner } from './PageDesigner';
 import { ReleasePanel } from './ReleasePanel';
@@ -107,6 +108,7 @@ const NAV_ITEMS: AppNavNode[] = [
     key: 'platform',
     label: '平台管理',
     children: [
+      { key: 'components', label: '组件预览' },
       { key: 'admin-members', label: '用户管理' },
       { key: 'admin-departments', label: '组织管理' },
       { key: 'admin-dictionaries', label: '字典管理' }
@@ -123,6 +125,7 @@ type NavKey =
   | 'page'
   | 'runtime'
   | 'release'
+  | 'components'
   | 'admin-members'
   | 'admin-departments'
   | 'admin-dictionaries';
@@ -139,6 +142,7 @@ const NAV_LABELS: Record<NavKey, string> = {
   page: '页面',
   runtime: '预览与运行',
   release: '版本与发布',
+  components: '组件预览',
   'admin-members': '用户管理',
   'admin-departments': '组织管理',
   'admin-dictionaries': '字典管理'
@@ -1175,6 +1179,8 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
             <AdminDepartments />
           ) : selectedKey === 'admin-dictionaries' ? (
             <AdminDictionaries />
+          ) : selectedKey === 'components' ? (
+            <ComponentGallery />
           ) : !draft ? (
             <Card loading />
           ) : selectedKey === 'home' ? (
