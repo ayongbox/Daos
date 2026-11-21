@@ -24,9 +24,9 @@ import {
   PlusOutlined
 } from '@ant-design/icons';
 import { tokens } from '@daos/ui';
+import { componentFor, componentLabel } from '@daos/renderer';
 import type {
   FieldLogicalType,
-  FormComponent,
   FormField,
   FormLayout,
   LinkageRule,
@@ -83,86 +83,6 @@ const DEFAULT_LAYOUT: FormLayout = {
   redirectAfterSubmit: null,
   subformSummary: false
 };
-
-const COMPONENT_LABELS: Record<string, string> = {
-  input: '单行文本',
-  textarea: '多行文本',
-  richtext: '富文本',
-  number: '数字',
-  select: '单选',
-  multi_select: '多选',
-  switch: '开关',
-  date: '日期',
-  datetime: '日期时间',
-  member: '成员',
-  member_multi: '成员（多选）',
-  department: '部门',
-  department_multi: '部门（多选）',
-  attachment: '附件',
-  relation: '关联记录',
-  subform: '明细表',
-  rollup: '引用汇总',
-  formula: '公式',
-  auto_number: '自动编号',
-  rating: '评分',
-  progress: '进度',
-  location: '地理位置',
-  barcode: '条码'
-};
-
-function componentLabel(component: FormComponent): string {
-  return COMPONENT_LABELS[component] ?? component;
-}
-
-function componentFor(type: FieldLogicalType): FormComponent {
-  switch (type) {
-    case 'text_long':
-      return 'textarea';
-    case 'rich_text':
-      return 'richtext';
-    case 'number':
-    case 'decimal':
-      return 'number';
-    case 'date':
-      return 'date';
-    case 'datetime':
-      return 'datetime';
-    case 'select':
-      return 'select';
-    case 'multi_select':
-      return 'multi_select';
-    case 'boolean':
-      return 'switch';
-    case 'member':
-      return 'member';
-    case 'member_multi':
-      return 'member_multi';
-    case 'department':
-      return 'department';
-    case 'department_multi':
-      return 'department_multi';
-    case 'attachment':
-      return 'attachment';
-    case 'relation':
-      return 'relation';
-    case 'rollup':
-      return 'rollup';
-    case 'formula':
-      return 'formula';
-    case 'auto_number':
-      return 'auto_number';
-    case 'rating':
-      return 'rating';
-    case 'progress':
-      return 'progress';
-    case 'location':
-      return 'location';
-    case 'barcode':
-      return 'barcode';
-    default:
-      return 'input';
-  }
-}
 
 function isComputed(type: FieldLogicalType): boolean {
   return type === 'rollup' || type === 'formula' || type === 'auto_number';

@@ -1,5 +1,7 @@
 import type { FormComponent, FormScene, LinkageRule, SchemaForm } from '@daos/metadata';
 
+export * from './registry';
+
 export interface RenderContext {
   scene: FormScene;
   locale: string;

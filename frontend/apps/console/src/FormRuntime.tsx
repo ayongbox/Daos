@@ -26,6 +26,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { tokens } from '@daos/ui';
+import { isReadonlyNode } from '@daos/renderer';
 import { ApiError } from '@daos/sdk';
 import type {
   FormScene,
@@ -43,21 +44,6 @@ import {
   type RelationOption,
   type RenderNode
 } from './api';
-
-const READONLY_COMPONENTS = new Set([
-  'formula',
-  'rollup',
-  'auto_number',
-  'creator',
-  'create_time',
-  'modifier',
-  'modify_time',
-  'record_id'
-]);
-
-function isReadonly(node: RenderNode): boolean {
-  return node.readonly || READONLY_COMPONENTS.has(node.component);
-}
 
 interface LinkageFieldState {
   hidden: boolean;
@@ -149,7 +135,7 @@ function useLinkage(
       states[node.id] = {
         hidden: node.hidden,
         required: node.required,
-        readonly: isReadonly(node)
+        readonly: isReadonlyNode(node)
       };
     }
     for (const [fieldId, node] of fields) {
@@ -188,7 +174,7 @@ function useLinkage(
               state.readonly = true;
               break;
             case 'editable':
-              state.readonly = isReadonly(node);
+              state.readonly = isReadonlyNode(node);
               break;
             case 'set_value':
               assignments.push({ fieldCode: node.fieldCode, value: action.value });
@@ -357,7 +343,7 @@ function control(
   node: RenderNode,
   appId: string,
   tableCode: string,
-  readonly = isReadonly(node)
+  readonly = isReadonlyNode(node)
 ) {
   const disabled = readonly;
   const placeholder = typeof node.props.placeholder === 'string' ? node.props.placeholder : undefined;
@@ -614,7 +600,7 @@ function renderNode(
   const state = linkageStates[node.id] ?? {
     hidden: node.hidden,
     required: node.required,
-    readonly: isReadonly(node)
+    readonly: isReadonlyNode(node)
   };
   if (state.hidden) return null;
   const label = node.label ?? node.fieldCode;
@@ -760,7 +746,7 @@ export function FormRuntime({
       for (const node of leaves) {
         if (!node.fieldCode) continue;
         const state = linkageStates[node.id];
-        if (state?.hidden || (state?.readonly ?? isReadonly(node))) continue;
+        if (state?.hidden || (state?.readonly ?? isReadonlyNode(node))) continue;
         if (!(node.fieldCode in values)) continue;
         const normalized = normalizeValue(node.component, values[node.fieldCode]);
         payload[node.fieldCode] =
@@ -776,7 +762,7 @@ export function FormRuntime({
         subforms[node.id] = rows.map((row) => {
           const item: Record<string, unknown> = {};
           for (const child of node.children) {
-            if (!child.fieldCode || isReadonly(child)) continue;
+            if (!child.fieldCode || isReadonlyNode(child)) continue;
             if (!(child.fieldCode in row)) continue;
             const normalized = normalizeValue(child.component, row[child.fieldCode]);
             item[child.fieldCode] =
