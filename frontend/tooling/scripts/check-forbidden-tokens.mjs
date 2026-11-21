@@ -5,10 +5,10 @@ const root = new URL('../..', import.meta.url).pathname;
 const scanRoots = ['apps', 'packages'];
 const extensions = new Set(['.ts', '.tsx', '.css', '.scss', '.less']);
 const forbidden = [
-  { token: '#1677ff', reason: '禁止使用 AntD 默认蓝，统一使用 #3370FF' },
-  { token: 'border-radius: 2px', reason: '圆角只允许 6 / 8 / 10' },
-  { token: 'borderRadius: 2', reason: '圆角只允许 6 / 8 / 10' },
-  { token: 'border-radius:2px', reason: '圆角只允许 6 / 8 / 10' }
+  { token: '#1677ff', reason: '禁止使用 AntD 默认蓝，统一使用 #2563EB' },
+  { token: 'border-radius: 2px', reason: '圆角只允许 6 / 8 / 12' },
+  { token: 'borderRadius: 2', reason: '圆角只允许 6 / 8 / 12' },
+  { token: 'border-radius:2px', reason: '圆角只允许 6 / 8 / 12' }
 ];
 
 function walk(dir, files) {

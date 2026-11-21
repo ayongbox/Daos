@@ -10,31 +10,36 @@
 
 ## 设计令牌
 
-在 Ant Design 5 的 `ConfigProvider` 中覆盖以下 token，禁止在业务组件里写死颜色。
+设计令牌的唯一来源是 `frontend/packages/ui/src/index.ts` 的 `tokens`（由 `@daos/app-shell` 的 `ThemeProvider` 灌入 Ant Design 5 的 `ConfigProvider`），禁止在业务组件里写死颜色。下表与 tokens 保持同步（M6.0.2 起统一为蓝主色系）。
 
 | 类别 | 令牌 | 值 |
 |---|---|---|
-| 主色 | `colorPrimary` | `#3370FF` |
-| 主色悬浮 | `colorPrimaryHover` | `#4E83FD` |
-| 主色按下 | `colorPrimaryActive` | `#245BDB` |
-| 成功 | `colorSuccess` | `#34C724` |
-| 警告 | `colorWarning` | `#FF8800` |
-| 错误 | `colorError` | `#F54A45` |
-| 页面背景 | `colorBgLayout` | `#F5F6F7` |
+| 主色 | `colorPrimary` | `#2563EB` |
+| 主色悬浮 | `colorPrimaryHover` | `#3B82F6` |
+| 主色按下 | `colorPrimaryActive` | `#1D4ED8` |
+| 主色浅底 | `colorPrimaryBg` | `#EFF6FF` |
+| 成功 | `colorSuccess` | `#16A34A` |
+| 警告 | `colorWarning` | `#F59E0B` |
+| 错误 | `colorError` | `#EF4444` |
+| 页面背景 | `colorBgLayout` | `#F5F7FA` |
 | 容器背景 | `colorBgContainer` | `#FFFFFF` |
-| 分割线 | `colorBorderSecondary` | `#DEE0E3` |
-| 文字主 | `colorText` | `#1F2329` |
-| 文字次 | `colorTextSecondary` | `#646A73` |
-| 文字三级 | `colorTextTertiary` | `#8F959E` |
-| 文字禁用 | `colorTextDisabled` | `#BBBFC4` |
-| 圆角 | `borderRadius` | `6` |
-| 卡片圆角 | `borderRadiusLG` | `8` |
-| 弹层圆角 | `borderRadius`（modal/drawer 单独设 `10`） | `10` |
-| 阴影 | `boxShadowSecondary` | `0 2px 8px rgba(31,35,41,0.08)` |
-| 字号 | `fontSize` | `14` |
-| 小字号 | `fontSizeSM` | `12` |
-| 标题字号 | `fontSizeHeading3` | `18` |
-| 控件高度 | `controlHeight` | `32` |
+| 浅灰填充 | `colorFillTertiary` | `#F5F7FA` |
+| 分割线/边框 | `colorBorder` | `#E5E7EB` |
+| 文字主 | `colorTextPrimary` | `#111827` |
+| 文字次 | `colorTextSecondary` | `#6B7280` |
+| 文字三级 | `colorTextTertiary` | `#9CA3AF` |
+| 文字禁用 | `colorTextDisabled` | `#D1D5DB` |
+| 反白文字 | `colorTextInverse` | `#FFFFFF` |
+| 圆角小 | `radiusSm` | `6` |
+| 圆角中（卡片） | `radiusMd` | `8` |
+| 圆角大（弹层） | `radiusLg` | `12` |
+| 阴影 | `shadowSecondary` | `0 2px 8px rgba(31,35,41,0.08)` |
+| 字号 | `fontSizeSm` / `fontSizeMd` / `fontSizeLg` / `fontSizeHeading` | `12` / `14` / `16` / `18` |
+| 控件高度 | `controlHeight` | `36` |
+| 顶部栏高 | `headerHeight` | `56` |
+| 工具栏高 | `toolbarHeight` | `48` |
+| 状态区高 | `statusBarHeight` | `32` |
+| 侧边导航宽 | `siderWidth` | `240` |
 
 字体使用系统字体栈：`-apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`。不使用飞书品牌字体。
 
@@ -42,12 +47,14 @@
 
 | 区域 | 规范 |
 |---|---|
-| 左侧导航 | 宽 240px，背景 `#FFFFFF` 或 `#F5F6F7`，分组标题 12px 次级色，选中项用浅蓝底 `#E1EAFF` + 主色文字，不用整块深色 |
-| 顶部栏 | 高 48px，白底，仅底部 1px 分割线，不放重色块 |
-| 内容区 | 背景 `#F5F6F7`，卡片白底、8px 圆角、无边框、轻阴影或不加阴影 |
+| 左侧导航 | 宽 240px，背景 `#FFFFFF`，分组标题 12px 次级色，选中项用浅蓝底 `#EFF6FF` + 主色文字，不用整块深色 |
+| 顶部栏 | 高 56px，白底，仅底部 1px 分割线，不放重色块 |
+| 工具栏 | 高 48px，白底，承载当前模块的标题与主操作 |
+| 内容区 | 背景 `#F5F7FA`，卡片白底、8px 圆角、无边框、轻阴影或不加阴影 |
+| 底部状态区 | 高 32px 常驻，承载保存状态、校验结果与版本信息 |
 | 卡片内边距 | 16 / 20 / 24，随密度切换，统一取 4 的倍数 |
-| 表格 | 表头 `#F5F6F7` 底、12px 次级色文字；行高 48；分割线只用横向 |
-| 抽屉 | 右侧滑出，宽 480 / 640，圆角 10，遮罩 `rgba(31,35,41,0.2)` |
+| 表格 | 表头 `#F5F7FA` 底、12px 次级色文字；行高 48；分割线只用横向 |
+| 抽屉 | 右侧滑出，宽 480 / 640，圆角 12，遮罩 `rgba(31,35,41,0.2)` |
 
 ## 交互语言
 
@@ -56,7 +63,7 @@
 - 危险操作用文字按钮 + 二次确认，不用红色大按钮；
 - 表格批量操作以顶部浮条出现，不常驻；
 - 空状态用轻量插画 + 一句引导，不使用大面积色块；
-- 加载态优先骨架屏，不用全屏 spinner；
+- 加载态优先骨架屏，不用全屏 spinner；空态 / 错误态 / 无权限分别使用 `EmptyState` / `ErrorState` / `ForbiddenState`，统一取自 `@daos/ui` 四态基础组件；
 - 所有过渡 150–200ms，`ease-out`，不做夸张动画。
 
 ## 图标
@@ -80,5 +87,5 @@
 ## 验收要求
 
 - 任一页面不得出现 Ant Design 默认蓝色（`#1677ff`）与默认圆角（`2px`）；
-- 颜色取值只能来自本文件的设计令牌；
-- 新增组件需先在控制台「组件预览」页登记，确认视觉一致后再进入业务开发。
+- 颜色取值只能来自设计令牌（`@daos/ui` tokens，本文件令牌表与之同步）；
+- 新增组件需先在控制台「平台管理 → 组件预览」页登记，确认视觉一致后再进入业务开发；四态组件（骨架屏 / 空态 / 错误态 / 无权限）统一取自 `@daos/ui`，不重复自建。
