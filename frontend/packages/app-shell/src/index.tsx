@@ -11,6 +11,9 @@ export interface ThemeProviderProps {
 
 /**
  * 全局主题：把 UI 规范的令牌一次性灌入 Ant Design，业务组件不再重复配置颜色。
+ *
+ * <p>主题在应用根装配一次（登录页与页面壳共用），AppShell 只负责布局壳，不再内嵌主题，
+ * 避免 ConfigProvider 双层嵌套。</p>
  */
 export function ThemeProvider({ children }: ThemeProviderProps) {
   return (
@@ -148,7 +151,8 @@ function findTopKey(nav: AppNavNode[], selectedKey?: string): string | undefined
  * 顶部全局栏（56px）→ 左侧应用导航（220~240px）+ 工具栏（48px）→ 底部状态区。
  *
  * <p>顶部全局栏渲染导航树顶层模块，左侧渲染完整分组树，两处联动切换；
- * 认证、请求拦截与错误边界由各应用自行装配，外壳不承担与路由相关的隐式行为。</p>
+ * 认证、请求拦截与错误边界由各应用自行装配，外壳不承担与路由相关的隐式行为；
+ * 主题由 ThemeProvider 在应用根装配一次，外壳不内嵌主题，保证壳与主题各只有单一来源。</p>
  */
 export function AppShell({
   title,
@@ -172,125 +176,123 @@ export function AppShell({
   }
 
   return (
-    <ThemeProvider>
-      <Layout style={{ height: '100vh', overflow: 'hidden' }}>
-        <Header
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 16,
-            borderBottom: `1px solid ${tokens.colorBorder}`
-          }}
-        >
-          <Typography.Title level={4} style={{ margin: 0, fontSize: tokens.fontSizeLg, whiteSpace: 'nowrap' }}>
-            {title}
-          </Typography.Title>
-          {hasNav ? (
-            <nav style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflow: 'hidden' }}>
-              {(nav ?? []).map((node) => {
-                const keys: string[] = [];
-                collectEnabledKeys(node, keys);
-                const disabled = keys.length === 0;
-                const active = node.key === activeTopKey;
-                return (
-                  <button
-                    key={node.key}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => selectNode(node)}
+    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
+      <Header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          borderBottom: `1px solid ${tokens.colorBorder}`
+        }}
+      >
+        <Typography.Title level={4} style={{ margin: 0, fontSize: tokens.fontSizeLg, whiteSpace: 'nowrap' }}>
+          {title}
+        </Typography.Title>
+        {hasNav ? (
+          <nav style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            {(nav ?? []).map((node) => {
+              const keys: string[] = [];
+              collectEnabledKeys(node, keys);
+              const disabled = keys.length === 0;
+              const active = node.key === activeTopKey;
+              return (
+                <button
+                  key={node.key}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => selectNode(node)}
+                  style={{
+                    border: 'none',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                    padding: '0 16px',
+                    height: 32,
+                    borderRadius: tokens.radiusSm,
+                    fontFamily: tokens.fontFamily,
+                    fontSize: tokens.fontSizeMd,
+                    fontWeight: active ? 500 : 400,
+                    color: disabled
+                      ? tokens.colorTextDisabled
+                      : active
+                        ? tokens.colorPrimary
+                        : tokens.colorTextPrimary,
+                    background: active ? tokens.colorPrimaryBg : 'transparent'
+                  }}
+                >
+                  {node.label}
+                </button>
+              );
+            })}
+          </nav>
+        ) : (
+          <div style={{ flex: 1 }} />
+        )}
+        {headerExtra}
+      </Header>
+      <Layout style={{ minHeight: 0 }}>
+        {hasNav ? (
+          <Sider
+            theme="light"
+            width={tokens.siderWidth}
+            style={{ borderRight: `1px solid ${tokens.colorBorder}`, overflow: 'auto', padding: '8px 0' }}
+          >
+            {(nav ?? []).map((group) =>
+              group.children && group.children.length > 0 ? (
+                <div key={group.key} style={{ marginBottom: 4 }}>
+                  <div
                     style={{
-                      border: 'none',
-                      cursor: disabled ? 'not-allowed' : 'pointer',
-                      whiteSpace: 'nowrap',
-                      padding: '0 16px',
-                      height: 32,
-                      borderRadius: tokens.radiusSm,
-                      fontFamily: tokens.fontFamily,
-                      fontSize: tokens.fontSizeMd,
-                      fontWeight: active ? 500 : 400,
-                      color: disabled
-                        ? tokens.colorTextDisabled
-                        : active
-                          ? tokens.colorPrimary
-                          : tokens.colorTextPrimary,
-                      background: active ? tokens.colorPrimaryBg : 'transparent'
+                      padding: '8px 16px 4px',
+                      fontSize: tokens.fontSizeSm,
+                      color: tokens.colorTextTertiary
                     }}
                   >
-                    {node.label}
-                  </button>
-                );
-              })}
-            </nav>
-          ) : (
-            <div style={{ flex: 1 }} />
-          )}
-          {headerExtra}
-        </Header>
-        <Layout style={{ minHeight: 0 }}>
-          {hasNav ? (
-            <Sider
-              theme="light"
-              width={tokens.siderWidth}
-              style={{ borderRight: `1px solid ${tokens.colorBorder}`, overflow: 'auto', padding: '8px 0' }}
-            >
-              {(nav ?? []).map((group) =>
-                group.children && group.children.length > 0 ? (
-                  <div key={group.key} style={{ marginBottom: 4 }}>
-                    <div
-                      style={{
-                        padding: '8px 16px 4px',
-                        fontSize: tokens.fontSizeSm,
-                        color: tokens.colorTextTertiary
-                      }}
-                    >
-                      {group.label}
-                    </div>
-                    {group.children.map((item) => (
-                      <SiderNavItem key={item.key} node={item} active={item.key === selectedKey} onSelect={onSelect} />
-                    ))}
+                    {group.label}
                   </div>
-                ) : (
-                  <SiderNavItem key={group.key} node={group} active={group.key === selectedKey} onSelect={onSelect} />
-                )
-              )}
-            </Sider>
+                  {group.children.map((item) => (
+                    <SiderNavItem key={item.key} node={item} active={item.key === selectedKey} onSelect={onSelect} />
+                  ))}
+                </div>
+              ) : (
+                <SiderNavItem key={group.key} node={group} active={group.key === selectedKey} onSelect={onSelect} />
+              )
+            )}
+          </Sider>
+        ) : null}
+        <Layout style={{ minHeight: 0 }}>
+          {toolbar ? (
+            <div
+              style={{
+                height: tokens.toolbarHeight,
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 16px',
+                background: tokens.colorBgContainer,
+                borderBottom: `1px solid ${tokens.colorBorder}`
+              }}
+            >
+              {toolbar}
+            </div>
           ) : null}
-          <Layout style={{ minHeight: 0 }}>
-            {toolbar ? (
-              <div
-                style={{
-                  height: tokens.toolbarHeight,
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '0 16px',
-                  background: tokens.colorBgContainer,
-                  borderBottom: `1px solid ${tokens.colorBorder}`
-                }}
-              >
-                {toolbar}
-              </div>
-            ) : null}
-            <Content style={{ padding: 16, overflow: 'auto' }}>{children}</Content>
-          </Layout>
+          <Content style={{ padding: 16, overflow: 'auto' }}>{children}</Content>
         </Layout>
-        {/* 底部状态区常驻四层壳体：无状态内容时保留 32px 空条，维持布局稳定 */}
-        <div
-          style={{
-            height: tokens.statusBarHeight,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 16,
-            padding: '0 16px',
-            background: tokens.colorBgContainer,
-            borderTop: `1px solid ${tokens.colorBorder}`,
-            fontSize: tokens.fontSizeSm,
-            color: tokens.colorTextSecondary
-          }}
-        >
-          {status}
-        </div>
       </Layout>
-    </ThemeProvider>
+      {/* 底部状态区常驻四层壳体：无状态内容时保留 32px 空条，维持布局稳定 */}
+      <div
+        style={{
+          height: tokens.statusBarHeight,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          padding: '0 16px',
+          background: tokens.colorBgContainer,
+          borderTop: `1px solid ${tokens.colorBorder}`,
+          fontSize: tokens.fontSizeSm,
+          color: tokens.colorTextSecondary
+        }}
+      >
+        {status}
+      </div>
+    </Layout>
   );
 }
 
