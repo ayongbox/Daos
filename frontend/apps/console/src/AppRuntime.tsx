@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   Descriptions,
-  Drawer,
   Empty,
   Segmented,
   Select,
@@ -17,7 +16,7 @@ import {
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { tokens } from '@daos/ui';
+import { DetailDrawer, StatCards, tokens } from '@daos/ui';
 import { ApiError } from '@daos/sdk';
 import type { SchemaApp } from '@daos/metadata';
 import {
@@ -171,18 +170,9 @@ function MetricsBlock({ appId, viewCode }: { appId: string; viewCode: string }) 
       : [{ label: '记录数', value: total }];
 
   return (
-    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-      {items.map((item) => (
-        <Card key={item.label} size="small" style={{ minWidth: 160, flex: '1 1 160px' }}>
-          <Typography.Text type="secondary" style={{ fontSize: tokens.fontSizeSm }}>
-            {item.label}
-          </Typography.Text>
-          <Typography.Title level={3} style={{ margin: 0 }}>
-            {metricValue(item.value)}
-          </Typography.Title>
-        </Card>
-      ))}
-    </div>
+    <StatCards
+      items={items.map((item) => ({ label: item.label, value: metricValue(item.value) }))}
+    />
   );
 }
 
@@ -568,22 +558,12 @@ function ViewRuntime({
       </Card>
       {aggregated && viewMode === 'board' ? (
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {(detail?.aggregations ?? []).map((aggregate) => (
-              <Card
-                key={aggregate.displayName}
-                size="small"
-                style={{ minWidth: 160, flex: '1 1 160px' }}
-              >
-                <Typography.Text type="secondary" style={{ fontSize: tokens.fontSizeSm }}>
-                  {aggregate.displayName}
-                </Typography.Text>
-                <Typography.Title level={3} style={{ margin: 0 }}>
-                  {metricValue(summary?.[aggregate.displayName])}
-                </Typography.Title>
-              </Card>
-            ))}
-          </div>
+          <StatCards
+            items={(detail?.aggregations ?? []).map((aggregate) => ({
+              label: aggregate.displayName,
+              value: metricValue(summary?.[aggregate.displayName])
+            }))}
+          />
           <Card
             size="small"
             title="分组分布"
@@ -1025,12 +1005,10 @@ export function AppRuntime({
         )}
       </div>
 
-      <Drawer
-        width={720}
+      <DetailDrawer
         open={viewer !== null}
         title="记录详情"
         onClose={() => setViewer(null)}
-        destroyOnHidden
         extra={
           viewer ? (
             <Button
@@ -1053,14 +1031,12 @@ export function AppRuntime({
             reloadKey={viewerKey}
           />
         ) : null}
-      </Drawer>
+      </DetailDrawer>
 
-      <Drawer
-        width={720}
+      <DetailDrawer
         open={editor !== null}
         title={editor?.recordId ? '编辑记录' : '新建记录'}
         onClose={() => setEditor(null)}
-        destroyOnHidden
       >
         {editor ? (
           <FormRuntime
@@ -1078,7 +1054,7 @@ export function AppRuntime({
             }}
           />
         ) : null}
-      </Drawer>
+      </DetailDrawer>
     </Space>
   );
 }

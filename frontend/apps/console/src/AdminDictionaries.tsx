@@ -17,7 +17,7 @@ import {
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { tokens } from '@daos/ui';
+import { tokens, ToolbarRow } from '@daos/ui';
 import { ApiError } from '@daos/sdk';
 import {
   api,
@@ -427,19 +427,15 @@ export function AdminDictionaries() {
                 </Form>
 
                 <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: 8
-                    }}
-                  >
-                    <Typography.Text strong>字典项</Typography.Text>
-                    <Button size="small" onClick={addItem}>
-                      添加字典项
-                    </Button>
-                  </div>
+                  <ToolbarRow
+                    style={{ marginBottom: 8 }}
+                    info={<Typography.Text strong>字典项</Typography.Text>}
+                    actions={
+                      <Button size="small" onClick={addItem}>
+                        添加字典项
+                      </Button>
+                    }
+                  />
                   <Table
                     rowKey="key"
                     size="small"

@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Divider,
-  Drawer,
   Dropdown,
   Empty,
   Form,
@@ -23,7 +22,7 @@ import {
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { EmptyState, SkeletonCard, tokens } from '@daos/ui';
+import { DetailDrawer, EmptyState, PageHeader, SkeletonCard, tokens } from '@daos/ui';
 import { AppShell, type AppNavNode } from '@daos/app-shell';
 import { ApiError } from '@daos/sdk';
 import { FIELD_TYPE_LABELS } from '@daos/metadata';
@@ -1077,14 +1076,10 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
     >
       {selectedKey === 'apps' ? (
             <Space direction="vertical" size={16} style={{ width: '100%' }}>
-              <div>
-                <Typography.Title level={4} style={{ margin: 0, fontSize: tokens.fontSizeHeading }}>
-                  我的应用
-                </Typography.Title>
-                <Typography.Text type="secondary">
-                  共 {apps.length} 个应用，选择应用进入数据建模
-                </Typography.Text>
-              </div>
+              <PageHeader
+                title="我的应用"
+                description={`共 ${apps.length} 个应用，选择应用进入数据建模`}
+              />
               {apps.length === 0 ? (
                 <Card>
                   <EmptyState
@@ -1460,7 +1455,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         </Form>
       </Modal>
 
-      <Drawer
+      <DetailDrawer
         title={
           <Space>
             <span>{editingField ? '字段配置' : '添加字段'}</span>
@@ -1470,7 +1465,6 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         width="min(480px, calc(100vw - 48px))"
         open={fieldModal !== null}
         onClose={closeFieldDrawer}
-        destroyOnHidden
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button onClick={closeFieldDrawer}>取消</Button>
@@ -1670,7 +1664,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
             <Input.TextArea rows={2} maxLength={200} showCount placeholder="展示在表单字段下方的填写说明" />
           </Form.Item>
         </Form>
-      </Drawer>
+      </DetailDrawer>
 
       <Modal
         title="添加索引"
@@ -1783,7 +1777,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
         )}
       </Modal>
 
-      <Drawer title="迁移历史" width={720} open={history !== null} onClose={() => setHistory(null)}>
+      <DetailDrawer title="迁移历史" open={history !== null} onClose={() => setHistory(null)}>
         <Table
           rowKey="id"
           size="small"
@@ -1807,7 +1801,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
             }
           ]}
         />
-      </Drawer>
+      </DetailDrawer>
     </AppShell>
   );
 }

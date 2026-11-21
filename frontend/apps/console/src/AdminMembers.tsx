@@ -15,6 +15,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { ApiError } from '@daos/sdk';
+import { ToolbarRow } from '@daos/ui';
 import { api, type DepartmentView, type MemberStatus, type MemberView } from './api';
 
 interface MemberFormValues {
@@ -151,12 +152,14 @@ export function AdminMembers() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography.Text type="secondary">共 {members.length} 个用户</Typography.Text>
-        <Button type="primary" onClick={openCreate}>
-          新建用户
-        </Button>
-      </div>
+      <ToolbarRow
+        info={<Typography.Text type="secondary">共 {members.length} 个用户</Typography.Text>}
+        actions={
+          <Button type="primary" onClick={openCreate}>
+            新建用户
+          </Button>
+        }
+      />
       <Table
         rowKey="id"
         size="small"

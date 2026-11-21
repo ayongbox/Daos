@@ -39,3 +39,6 @@ export type ThemeTokens = typeof tokens;
 
 // 四态基础组件（加载骨架屏 / 空态 / 错误态 / 无权限），与令牌同包发布，保证只消费 tokens。
 export * from './states';
+
+// 通用业务组件（页头 / 工具行 / 统计卡组 / 详情抽屉），沉淀各页重复布局模式。
+export * from './patterns';

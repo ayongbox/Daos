@@ -1,17 +1,10 @@
 import { Button, Card, Space, Tag, Typography } from 'antd';
-import { EmptyState, tokens } from '@daos/ui';
+import { EmptyState, StatCards, tokens } from '@daos/ui';
 import type { SchemaApp, SchemaMenu } from '@daos/metadata';
 import type { AppSummary } from './api';
 import { AppIcon } from './appIcons';
 
 type Capability = 'model' | 'form' | 'view' | 'page' | 'runtime' | 'release';
-
-interface StatCard {
-  key: Capability;
-  label: string;
-  value: number;
-  hint: string;
-}
 
 /** 应用工作台：进入应用后的首页，集中展示结构概览与页面入口。 */
 export function AppWorkbench({
@@ -32,12 +25,14 @@ export function AppWorkbench({
   const menus = (app.menus ?? []).filter((menu) => !menu.deleted);
   const tables = app.tables.filter((table) => !table.deleted);
 
-  const stats: StatCard[] = [
-    { key: 'model', label: '数据表', value: tables.length, hint: '字段与索引' },
-    { key: 'form', label: '表单', value: forms.length, hint: '录入与编辑' },
-    { key: 'view', label: '视图', value: views.length, hint: '列表与汇总' },
-    { key: 'page', label: '页面', value: menus.length, hint: '运行端导航' }
-  ];
+  const stats = (
+    [
+      { key: 'model', label: '数据表', value: tables.length, hint: '字段与索引' },
+      { key: 'form', label: '表单', value: forms.length, hint: '录入与编辑' },
+      { key: 'view', label: '视图', value: views.length, hint: '列表与汇总' },
+      { key: 'page', label: '页面', value: menus.length, hint: '运行端导航' }
+    ] as Array<{ key: Capability; label: string; value: number; hint: string }>
+  ).map((stat) => ({ ...stat, onClick: () => onOpenCapability(stat.key) }));
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -87,33 +82,7 @@ export function AppWorkbench({
         </div>
       </Card>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: 12
-        }}
-      >
-        {stats.map((stat) => (
-          <Card
-            key={stat.key}
-            hoverable
-            size="small"
-            onClick={() => onOpenCapability(stat.key)}
-            styles={{ body: { padding: '14px 16px' } }}
-          >
-            <Typography.Text type="secondary" style={{ fontSize: tokens.fontSizeSm }}>
-              {stat.label}
-            </Typography.Text>
-            <div style={{ fontSize: 26, fontWeight: 600, lineHeight: '34px' }}>
-              {stat.value}
-            </div>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {stat.hint}
-            </Typography.Text>
-          </Card>
-        ))}
-      </div>
+      <StatCards items={stats} />
 
       <div
         style={{
