@@ -1,11 +1,22 @@
 import { useState, type ReactNode } from 'react';
-import { App as AntApp, Button, Card, Divider, Space, Tag, Typography } from 'antd';
+import { App as AntApp, Button, Card, Divider, Input, Space, Tag, Typography } from 'antd';
 import {
+  CanvasItemShell,
+  PanelField,
+  PanelSection,
+  PropertyPanel,
+  SwitchRow
+} from '@daos/designer';
+import {
+  DetailDrawer,
   EmptyState,
   ErrorState,
   ForbiddenState,
+  PageHeader,
   SkeletonCard,
   SkeletonTable,
+  StatCards,
+  ToolbarRow,
   tokens
 } from '@daos/ui';
 
@@ -82,6 +93,7 @@ function SpecItem({ label, value, preview }: { label: string; value: string; pre
 export function ComponentGallery() {
   const { message } = AntApp.useApp();
   const [retryCount, setRetryCount] = useState(0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
@@ -128,6 +140,98 @@ export function ComponentGallery() {
               description="你没有该模块的访问权限，可联系管理员开通。"
               action={<Button onClick={() => message.info('已发起权限申请')}>申请权限</Button>}
             />
+          </ComponentEntry>
+        </div>
+      </div>
+
+      <div>
+        <SectionTitle title="通用业务组件" description="来自 @daos/ui patterns，替代各页自拼的页头/工具行/统计卡/详情抽屉版式。" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+          <ComponentEntry name="PageHeader" usage="页头">
+            <div style={{ padding: 16, background: tokens.colorBgLayout }}>
+              <PageHeader
+                title="页面标题"
+                description="一句话说明页面用途"
+                extra={<Button type="primary" size="small">主操作</Button>}
+              />
+            </div>
+          </ComponentEntry>
+          <ComponentEntry name="ToolbarRow" usage="工具行">
+            <div style={{ padding: 16, background: tokens.colorBgLayout }}>
+              <ToolbarRow
+                info={<Typography.Text type="secondary">共 12 条记录</Typography.Text>}
+                actions={
+                  <Space size={8}>
+                    <Button size="small">次要操作</Button>
+                    <Button size="small" type="primary">主要操作</Button>
+                  </Space>
+                }
+              />
+            </div>
+          </ComponentEntry>
+          <ComponentEntry name="StatCards" usage="统计卡">
+            <div style={{ padding: 16, background: tokens.colorBgLayout }}>
+              <StatCards
+                items={[
+                  { key: 'a', label: '记录数', value: '1,280', hint: '较上周 +12' },
+                  { key: 'b', label: '已发布表单', value: '6', hint: '共 8 个' },
+                  { key: 'c', label: '今日新增', value: '37' }
+                ]}
+              />
+            </div>
+          </ComponentEntry>
+          <ComponentEntry name="DetailDrawer" usage="详情抽屉">
+            <div style={{ padding: 16, background: tokens.colorBgLayout }}>
+              <Button size="small" onClick={() => setDrawerOpen(true)}>打开详情抽屉</Button>
+              <DetailDrawer
+                title="详情"
+                open={drawerOpen}
+                onClose={() => setDrawerOpen(false)}
+              >
+                <Typography.Text type="secondary">
+                  统一详情抽屉：默认宽度 min(720px, 100vw - 48px)，关闭时销毁内容。
+                </Typography.Text>
+              </DetailDrawer>
+            </div>
+          </ComponentEntry>
+        </div>
+      </div>
+
+      <div>
+        <SectionTitle title="设计器共享组件" description="来自 @daos/designer，供表单/视图/页面设计器复用的属性面板与画布条目。" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+          <ComponentEntry name="PropertyPanel + PanelField + SwitchRow" usage="属性面板">
+            <div style={{ padding: 16, background: tokens.colorBgLayout, display: 'flex', justifyContent: 'center' }}>
+              <PropertyPanel>
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                  <PanelField label="显示名称">
+                    <Input defaultValue="订单编号" />
+                  </PanelField>
+                  <PanelField label="占宽" layout="inline" labelWidth={64}>
+                    <Input defaultValue="整行" />
+                  </PanelField>
+                  <SwitchRow label="必填" checked />
+                  <SwitchRow label="只读" checked={false} onChange={() => message.info('已切换')} />
+                </Space>
+              </PropertyPanel>
+            </div>
+          </ComponentEntry>
+          <ComponentEntry name="PanelSection + CanvasItemShell" usage="面板分区/画布条目">
+            <div style={{ padding: 16, background: tokens.colorBgLayout }}>
+              <PanelSection
+                title="列配置"
+                extra={<Button size="small" type="link">同步表字段</Button>}
+              >
+                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                  <CanvasItemShell active>
+                    <Typography.Text>选中态条目</Typography.Text>
+                  </CanvasItemShell>
+                  <CanvasItemShell>
+                    <Typography.Text>普通条目</Typography.Text>
+                  </CanvasItemShell>
+                </Space>
+              </PanelSection>
+            </div>
           </ComponentEntry>
         </div>
       </div>
