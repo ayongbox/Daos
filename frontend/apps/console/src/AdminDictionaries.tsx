@@ -3,21 +3,19 @@ import {
   App as AntApp,
   Button,
   Card,
-  Empty,
   Form,
   Input,
   InputNumber,
   Popconfirm,
   Select,
   Space,
-  Spin,
   Switch,
   Table,
   Tag,
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { tokens, ToolbarRow } from '@daos/ui';
+import { EmptyState, SkeletonCard, tokens, ToolbarRow } from '@daos/ui';
 import { ApiError } from '@daos/sdk';
 import {
   api,
@@ -298,7 +296,7 @@ export function AdminDictionaries() {
 
       {!appId ? (
         <Card>
-          <Empty description="请先选择应用" />
+          <EmptyState title="请先选择应用" />
         </Card>
       ) : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', minWidth: 0 }}>
@@ -313,10 +311,11 @@ export function AdminDictionaries() {
             }
             styles={{ body: { padding: dictionaries.length === 0 ? 24 : '4px 8px' } }}
           >
-            <Spin spinning={loading}>
-              {dictionaries.length === 0 ? (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无字典" />
-              ) : (
+            {loading ? (
+              <SkeletonCard rows={3} />
+            ) : dictionaries.length === 0 ? (
+              <EmptyState compact title="暂无字典" />
+            ) : (
                 <Space direction="vertical" size={0} style={{ width: '100%' }}>
                   {dictionaries.map((dict) => (
                     <div
@@ -373,7 +372,6 @@ export function AdminDictionaries() {
                   ))}
                 </Space>
               )}
-            </Spin>
           </Card>
 
           <Card
@@ -389,7 +387,7 @@ export function AdminDictionaries() {
             }
           >
             {!selection ? (
-              <Empty description="选择左侧字典或新建字典" />
+              <EmptyState title="选择左侧字典或新建字典" />
             ) : (
               <Space direction="vertical" size={16} style={{ width: '100%' }}>
                 <Form form={detailForm} layout="vertical">
@@ -443,9 +441,7 @@ export function AdminDictionaries() {
                     columns={itemColumns}
                     dataSource={items}
                     locale={{
-                      emptyText: (
-                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无字典项" />
-                      )
+                      emptyText: <EmptyState compact title="暂无字典项" />
                     }}
                   />
                 </div>

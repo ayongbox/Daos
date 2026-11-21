@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { App as AntApp, Button, Card, Empty, Popconfirm, Space, Table, Tag, Typography } from 'antd';
+import { App as AntApp, Button, Card, Popconfirm, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import { tokens } from '@daos/ui';
+import { EmptyState, tokens } from '@daos/ui';
 import { ApiError } from '@daos/sdk';
 import type { SchemaApp } from '@daos/metadata';
 import { api, type AppSummary, type ReleaseView } from './api';
@@ -139,7 +139,7 @@ export function ReleasePanel({ app, summary, onRefreshSummary }: ReleasePanelPro
           columns={releaseColumns}
           dataSource={releases}
           pagination={false}
-          locale={{ emptyText: <Empty description="还没有发布记录" /> }}
+          locale={{ emptyText: <EmptyState compact title="还没有发布记录" /> }}
           scroll={{ x: 720 }}
           style={{
             borderRadius: tokens.radiusMd,

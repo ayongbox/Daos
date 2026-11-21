@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   App as AntApp,
   Button,
-  Empty,
   Form,
   Input,
   Modal,
@@ -15,7 +14,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { ApiError } from '@daos/sdk';
-import { ToolbarRow } from '@daos/ui';
+import { EmptyState, ToolbarRow } from '@daos/ui';
 import { api, type DepartmentView, type MemberStatus, type MemberView } from './api';
 
 interface MemberFormValues {
@@ -168,7 +167,7 @@ export function AdminMembers() {
         dataSource={members}
         pagination={false}
         locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无用户" />
+          emptyText: <EmptyState compact title="暂无用户" />
         }}
       />
 

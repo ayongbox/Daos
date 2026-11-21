@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   Divider,
-  Empty,
   Form,
   Input,
   InputNumber,
@@ -16,7 +15,7 @@ import {
   Tag,
   Typography
 } from 'antd';
-import { tokens } from '@daos/ui';
+import { EmptyState, tokens } from '@daos/ui';
 import type { SchemaApp, SchemaForm, SchemaMenu, SchemaTable, SchemaView } from '@daos/metadata';
 import { AppIcon, AppIconPicker } from './appIcons';
 import {
@@ -191,10 +190,7 @@ export function PageDesigner({
         styles={{ body: { padding: pages.length === 0 ? 24 : 8 } }}
       >
         {pages.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="还没有页面，从数据表生成一个"
-          />
+          <EmptyState compact title="还没有页面" description="从数据表生成一个。" />
         ) : (
           <Space direction="vertical" style={{ width: '100%' }} size={4}>
             {pages.map((page) => (
@@ -235,7 +231,7 @@ export function PageDesigner({
       <div style={{ flex: 1, minWidth: 0 }}>
         {!selected ? (
           <Card size="small">
-            <Empty description="选择左侧页面进行配置，或新建页面" />
+            <EmptyState title="选择左侧页面进行配置，或新建页面" />
           </Card>
         ) : (
           <Card
@@ -383,10 +379,7 @@ export function PageDesigner({
               </div>
 
               {blocks.length === 0 ? (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="还没有布局，添加组件组成页面"
-                />
+                <EmptyState compact title="还没有布局" description="添加组件组成页面。" />
               ) : (
                 <Space direction="vertical" style={{ width: '100%' }} size={8}>
                   {blocks.map((block, index) => {

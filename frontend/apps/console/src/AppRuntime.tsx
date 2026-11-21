@@ -5,18 +5,24 @@ import {
   Button,
   Card,
   Descriptions,
-  Empty,
   Segmented,
   Select,
   Space,
-  Spin,
   Table,
   Tabs,
   Tag,
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DetailDrawer, StatCards, tokens } from '@daos/ui';
+import {
+  DetailDrawer,
+  EmptyState,
+  ErrorState,
+  SkeletonCard,
+  SkeletonTable,
+  StatCards,
+  tokens
+} from '@daos/ui';
 import { ApiError } from '@daos/sdk';
 import type { SchemaApp } from '@daos/metadata';
 import {
@@ -62,7 +68,7 @@ function GroupBars({
   groupCodes: string[];
   metric: string;
 }) {
-  if (rows.length === 0) return <Empty description="暂无数据" />;
+  if (rows.length === 0) return <EmptyState compact title="暂无数据" />;
   const max = rows.reduce((acc, row) => {
     const value = Number(row[metric]);
     return Number.isFinite(value) ? Math.max(acc, value) : acc;
@@ -120,17 +126,19 @@ function GroupBars({
 
 /** 指标卡：按视图汇总展示；未配置汇总时回退为记录数。 */
 function MetricsBlock({ appId, viewCode }: { appId: string; viewCode: string }) {
-  const { message } = AntApp.useApp();
   const [detail, setDetail] = useState<ViewDetail | null>(null);
   const [summary, setSummary] = useState<Record<string, unknown> | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setDetail(null);
     setSummary(null);
     setTotal(null);
+    setLoadError(null);
     setLoading(true);
     api
       .view(appId, viewCode)
@@ -147,7 +155,7 @@ function MetricsBlock({ appId, viewCode }: { appId: string; viewCode: string }) 
       })
       .catch((cause) => {
         if (!cancelled && !(cause instanceof ApiError && cause.status === 401)) {
-          message.error(cause instanceof Error ? cause.message : '指标加载失败');
+          setLoadError(cause instanceof Error ? cause.message : '指标加载失败');
         }
       })
       .finally(() => {
@@ -156,10 +164,19 @@ function MetricsBlock({ appId, viewCode }: { appId: string; viewCode: string }) 
     return () => {
       cancelled = true;
     };
-  }, [appId, viewCode]);
+  }, [appId, viewCode, reloadKey]);
 
-  if (loading) return <Spin size="small" />;
-  if (!detail) return <Empty description="指标视图不可用" />;
+  if (loading) return <SkeletonCard rows={2} />;
+  if (loadError) {
+    return (
+      <ErrorState
+        compact
+        description={loadError}
+        onRetry={() => setReloadKey((value) => value + 1)}
+      />
+    );
+  }
+  if (!detail) return <EmptyState compact title="指标视图不可用" />;
 
   const items =
     detail.aggregations.length > 0
@@ -249,6 +266,7 @@ function RecordViewer({
   const [detail, setDetail] = useState<FormRecordDetail | null>(null);
   const [nodes, setNodes] = useState<RenderNode[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -272,10 +290,18 @@ function RecordViewer({
     return () => {
       cancelled = true;
     };
-  }, [appId, formCode, recordId, reloadKey]);
+  }, [appId, formCode, recordId, reloadKey, retryKey]);
 
-  if (error) return <Alert type="error" showIcon message={error} />;
-  if (!detail || !nodes) return <Spin />;
+  if (error) {
+    return (
+      <ErrorState
+        compact
+        description={error}
+        onRetry={() => setRetryKey((value) => value + 1)}
+      />
+    );
+  }
+  if (!detail || !nodes) return <SkeletonCard avatar rows={4} />;
 
   const fields = leafNodes(nodes).filter((node) => !node.hidden);
   const subforms = subformNodes(nodes);
@@ -355,6 +381,8 @@ function ViewRuntime({
   const [metric, setMetric] = useState<string | null>(null);
   const [current, setCurrent] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -366,6 +394,7 @@ function ViewRuntime({
     setMetric(null);
     setViewMode('table');
     setCurrent(1);
+    setLoadError(null);
     setLoading(true);
     api
       .view(appId, viewCode)
@@ -373,9 +402,8 @@ function ViewRuntime({
         if (!cancelled) setDetail(value);
       })
       .catch((cause) => {
-        if (!cancelled && !(cause instanceof ApiError && cause.status === 401)) {
-          message.error(cause instanceof Error ? cause.message : '视图加载失败');
-        }
+        if (cancelled || (cause instanceof ApiError && cause.status === 401)) return;
+        setLoadError(cause instanceof Error ? cause.message : '视图加载失败');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -383,7 +411,7 @@ function ViewRuntime({
     return () => {
       cancelled = true;
     };
-  }, [appId, viewCode]);
+  }, [appId, viewCode, retryKey]);
 
   useEffect(() => {
     if (!detail) return;
@@ -405,9 +433,8 @@ function ViewRuntime({
         }
       })
       .catch((cause) => {
-        if (!cancelled && !(cause instanceof ApiError && cause.status === 401)) {
-          message.error(cause instanceof Error ? cause.message : '数据加载失败');
-        }
+        if (cancelled || (cause instanceof ApiError && cause.status === 401)) return;
+        setLoadError(cause instanceof Error ? cause.message : '数据加载失败');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -415,7 +442,7 @@ function ViewRuntime({
     return () => {
       cancelled = true;
     };
-  }, [appId, viewCode, current, detail, reloadKey]);
+  }, [appId, viewCode, current, detail, reloadKey, retryKey]);
 
   useEffect(() => {
     if (!detail || detail.aggregations.length === 0) {
@@ -508,8 +535,17 @@ function ViewRuntime({
   if (loading && !detail) {
     return (
       <Card size="small">
-        <Spin />
+        <SkeletonTable rows={3} columns={4} />
       </Card>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <ErrorState
+        description={loadError}
+        onRetry={() => setRetryKey((value) => value + 1)}
+      />
     );
   }
 
@@ -590,7 +626,7 @@ function ViewRuntime({
                   metric={activeMetric}
                 />
               ) : (
-                <Empty description="该视图未配置分组，看板仅展示指标卡" />
+                <EmptyState compact title="该视图未配置分组，看板仅展示指标卡" />
               )}
               {boardPage && boardPage.total > boardPage.size ? (
                 <Typography.Text type="secondary" style={{ fontSize: tokens.fontSizeSm }}>
@@ -656,6 +692,7 @@ export function AppRuntime({
   const [reloadKey, setReloadKey] = useState(0);
   const [viewerKey, setViewerKey] = useState(0);
   const [structureKey, setStructureKey] = useState(0);
+  const [menuError, setMenuError] = useState<string | null>(null);
   const appliedInitialMenu = useRef<string | null>(null);
   /** 刷新外壳：重新拉取菜单、表单与视图，再刷新当前页面数据。 */
   function refreshShell() {
@@ -666,6 +703,7 @@ export function AppRuntime({
   useEffect(() => {
     let cancelled = false;
     setRuntimeMenus(null);
+    setMenuError(null);
     api
       .menus(appId)
       .then((value) => {
@@ -674,9 +712,8 @@ export function AppRuntime({
       .catch((cause) => {
         if (cancelled) return;
         setRuntimeMenus([]);
-        if (!(cause instanceof ApiError && cause.status === 401)) {
-          message.error(cause instanceof Error ? cause.message : '菜单加载失败');
-        }
+        if (cause instanceof ApiError && cause.status === 401) return;
+        setMenuError(cause instanceof Error ? cause.message : '菜单加载失败');
       });
     return () => {
       cancelled = true;
@@ -859,17 +896,23 @@ export function AppRuntime({
         }}
       >
         {menus === null ? (
-          <Spin />
+          <SkeletonCard avatar rows={4} />
+        ) : menuError ? (
+          <ErrorState
+            description={menuError}
+            onRetry={() => setStructureKey((current) => current + 1)}
+          />
         ) : menus.length === 0 ? (
-          <Empty
+          <EmptyState
+            title={mode === 'preview' ? '草稿里还没有页面' : '还没有已发布的菜单'}
             description={
               mode === 'preview'
-                ? '草稿里还没有页面，请先在「页面」中生成'
-                : '还没有已发布的菜单，请先在「页面」生成并发布'
+                ? '请先在「页面」中生成。'
+                : '请先在「页面」生成并发布。'
             }
           />
         ) : !activeMenu ? (
-          <Empty description="选择一个页面" />
+          <EmptyState compact title="选择一个页面" />
         ) : !isAvailable(activeMenu) ? (
           <Alert
             type="info"
@@ -1001,7 +1044,7 @@ export function AppRuntime({
             }
           />
         ) : (
-          <Empty description={`菜单类型 ${activeMenu.menuType} 暂未提供运行端`} />
+          <EmptyState compact title={`菜单类型 ${activeMenu.menuType} 暂未提供运行端`} />
         )}
       </div>
 

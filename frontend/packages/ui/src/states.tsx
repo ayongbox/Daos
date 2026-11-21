@@ -227,12 +227,15 @@ export interface ErrorStateProps {
   /** 重试回调；提供时渲染「重试」按钮。 */
   onRetry?: () => void;
   retryText?: string;
+  /** 紧凑版式：用于卡片/表格内嵌错误态。 */
+  compact?: boolean;
 }
 
 /** 错误态：描述 + 重试，替代散落的 message.error 占位。 */
-export function ErrorState({ title = '加载失败', description, onRetry, retryText = '重试' }: ErrorStateProps) {
+export function ErrorState({ title = '加载失败', description, onRetry, retryText = '重试', compact = false }: ErrorStateProps) {
   return (
     <StateView
+      compact={compact}
       icon={
         <StateIcon color={tokens.colorError}>
           <ErrorGlyph />

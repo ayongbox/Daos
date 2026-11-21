@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Divider,
-  Empty,
   Form,
   Input,
   InputNumber,
@@ -23,7 +22,7 @@ import {
   DeleteOutlined,
   PlusOutlined
 } from '@ant-design/icons';
-import { tokens } from '@daos/ui';
+import { EmptyState, tokens } from '@daos/ui';
 import { componentFor, componentLabel } from '@daos/renderer';
 import type {
   FieldLogicalType,
@@ -653,11 +652,9 @@ export function FormDesigner({
       }
     >
       {draft.forms.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="还没有表单"
-          style={{ margin: '12px 0' }}
-        />
+        <div style={{ margin: '12px 0' }}>
+          <EmptyState compact title="还没有表单" />
+        </div>
       ) : (
         <List
           size="small"
@@ -773,11 +770,17 @@ export function FormDesigner({
         }
       >
         {!form ? (
-          <Empty description="新建一个表单开始设计" style={{ padding: '40px 0' }} />
+          <div style={{ padding: '40px 0' }}>
+            <EmptyState title="新建一个表单开始设计" />
+          </div>
         ) : !table ? (
-          <Empty description="表单所属数据表已不存在，请重新创建表单" style={{ padding: '40px 0' }} />
+          <div style={{ padding: '40px 0' }}>
+            <EmptyState title="表单所属数据表已不存在，请重新创建表单" />
+          </div>
         ) : form.fields.length === 0 ? (
-          <Empty description="从左侧添加字段" style={{ padding: '40px 0' }} />
+          <div style={{ padding: '40px 0' }}>
+            <EmptyState title="从左侧添加字段" />
+          </div>
         ) : (
           <Space direction="vertical" style={{ width: '100%' }} size={8}>
             {form.fields.map((item, index) => {
@@ -1099,7 +1102,7 @@ export function FormDesigner({
             </Button>
           </Space>
           {!form || form.linkages.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有联动规则" />
+            <EmptyState compact title="还没有联动规则" />
           ) : (
             form.linkages.map((rule) => {
               const condition = rule.when[0];

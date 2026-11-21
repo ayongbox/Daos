@@ -1,7 +1,8 @@
 import { StrictMode, Suspense, lazy, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App as AntApp, Spin } from 'antd';
+import { App as AntApp } from 'antd';
 import { ThemeProvider } from '@daos/app-shell';
+import { SkeletonCard } from '@daos/ui';
 import './app.css';
 import { AUTH_EXPIRED_EVENT, api, tokenStore } from './api';
 
@@ -12,17 +13,21 @@ const ModelerPage = lazy(() =>
   import('./ModelerPage').then((module) => ({ default: module.ModelerPage }))
 );
 
-function fullScreenSpin() {
+/** 应用启动/懒加载占位：骨架屏保持页面版式稳定，替代全屏 Spin。 */
+function loadingShell() {
   return (
     <div
       style={{
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        padding: 24
       }}
     >
-      <Spin />
+      <div style={{ width: 'min(720px, 100%)' }}>
+        <SkeletonCard avatar rows={4} />
+      </div>
     </div>
   );
 }
@@ -75,9 +80,9 @@ function Console() {
   return (
     <ThemeProvider>
       <AntApp>
-        <Suspense fallback={fullScreenSpin()}>
+        <Suspense fallback={loadingShell()}>
           {auth === 'checking' ? (
-            fullScreenSpin()
+            loadingShell()
           ) : auth === 'authenticated' ? (
             <ModelerPage onLogout={logout} />
           ) : (

@@ -5,7 +5,6 @@ import {
   Card,
   Divider,
   Dropdown,
-  Empty,
   Form,
   Input,
   InputNumber,
@@ -1295,7 +1294,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
                   </Card>
                   {!selectedTable ? (
                     <Card style={{ flex: '1 1 420px', minWidth: 0 }}>
-                      <Empty description="选择或新建一张数据表" />
+                      <EmptyState title="选择或新建一张数据表" />
                     </Card>
                   ) : (
                     <Card
@@ -1773,7 +1772,7 @@ export function ModelerPage({ onLogout }: { onLogout: () => void }) {
             ]}
           />
         ) : (
-          <Empty description="没有结构差异" />
+          <EmptyState compact title="没有结构差异" />
         )}
       </Modal>
 

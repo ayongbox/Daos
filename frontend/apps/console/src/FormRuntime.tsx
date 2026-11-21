@@ -6,20 +6,18 @@ import {
   Button,
   Card,
   Divider,
-  Empty,
   Form,
   type FormInstance,
   Popconfirm,
   Select,
   Space,
-  Spin,
   Table,
   Tag,
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import { tokens } from '@daos/ui';
+import { EmptyState, ErrorState, SkeletonCard, SkeletonTable, tokens } from '@daos/ui';
 import { FormControl, SubformEditor, isReadonlyNode, type RelationOptionsLoader } from '@daos/renderer';
 import { ApiError } from '@daos/sdk';
 import type {
@@ -301,13 +299,13 @@ function RecordDetail({
     };
   }, [appId, formCode, recordId]);
 
-  if (loading) return <Spin size="small" />;
-  if (!detail) return <Typography.Text type="secondary">明细加载失败</Typography.Text>;
+  if (loading) return <SkeletonTable rows={2} columns={4} />;
+  if (!detail) return <ErrorState compact description="明细加载失败" />;
 
   const blocks = nodes
     .map((node) => ({ node, rows: detail.subforms[node.id] ?? [] }))
     .filter((block) => block.rows.length > 0);
-  if (blocks.length === 0) return <Typography.Text type="secondary">没有明细数据</Typography.Text>;
+  if (blocks.length === 0) return <EmptyState compact title="没有明细数据" />;
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={12}>
@@ -653,13 +651,16 @@ export function FormRuntime({
   }
 
   if (forms === null) {
-    return <Card loading />;
+    return <SkeletonCard rows={3} />;
   }
 
   if (forms.length === 0 && !fixedFormCode) {
     return (
       <Card>
-        <Empty description="还没有已发布的表单，请先在「表单设计」中创建并发布" />
+        <EmptyState
+          title="还没有已发布的表单"
+          description="请先在「表单设计」中创建并发布。"
+        />
       </Card>
     );
   }
@@ -716,7 +717,7 @@ export function FormRuntime({
             </Space>
           </Form>
         ) : (
-          <Empty description="选择表单后开始填写" />
+          <EmptyState compact title="选择表单后开始填写" />
         )}
       </Card>
 

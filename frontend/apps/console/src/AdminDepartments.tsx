@@ -4,16 +4,14 @@ import {
   Button,
   Card,
   Dropdown,
-  Empty,
   Form,
   Input,
   Modal,
-  Spin,
   Tree,
   Typography
 } from 'antd';
 import type { DataNode } from 'antd/es/tree';
-import { tokens } from '@daos/ui';
+import { EmptyState, SkeletonCard, tokens } from '@daos/ui';
 import { ApiError } from '@daos/sdk';
 import { api, type DepartmentView } from './api';
 
@@ -145,10 +143,11 @@ export function AdminDepartments() {
         </Button>
       }
     >
-      <Spin spinning={loading}>
-        {activeDepartments.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有部门，先创建一个" />
-        ) : (
+      {loading ? (
+        <SkeletonCard rows={4} />
+      ) : activeDepartments.length === 0 ? (
+        <EmptyState compact title="还没有部门" description="先创建一个部门。" />
+      ) : (
           <Tree
             showLine
             blockNode
@@ -200,7 +199,6 @@ export function AdminDepartments() {
             }}
           />
         )}
-      </Spin>
 
       <Modal
         title={

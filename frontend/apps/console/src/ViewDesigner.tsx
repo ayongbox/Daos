@@ -3,7 +3,6 @@ import {
   App as AntApp,
   Button,
   Card,
-  Empty,
   Input,
   InputNumber,
   List,
@@ -15,7 +14,7 @@ import {
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { tokens } from '@daos/ui';
+import { EmptyState, tokens } from '@daos/ui';
 import type {
   AggregateFunction,
   ConditionOperator,
@@ -982,7 +981,7 @@ export function ViewDesigner({
                   </Card>
                 ) : (
                   <Card size="small" style={{ flex: 1, minWidth: 420 }}>
-                    <Empty description="创建或选择一个视图" />
+                    <EmptyState title="创建或选择一个视图" />
                   </Card>
                 )}
               </div>
