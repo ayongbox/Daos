@@ -14,6 +14,7 @@ import {
   Typography
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { PanelSection, newId, now, uniqueCode } from '@daos/designer';
 import { EmptyState, tokens } from '@daos/ui';
 import type {
   AggregateFunction,
@@ -66,26 +67,6 @@ const HAVING_OPERATORS: Array<{ value: ConditionOperator; label: string }> = [
   { value: 'not_in', label: '不属于' }
 ];
 
-function newId(): string {
-  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-  let time = Date.now();
-  let out = '';
-  for (let i = 0; i < 10; i += 1) {
-    out = alphabet.charAt(time % 32) + out;
-    time = Math.floor(time / 32);
-  }
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  for (const byte of bytes) {
-    out += alphabet.charAt(byte % 32);
-  }
-  return out;
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
-
 function visibleFields(table: SchemaTable) {
   return table.fields.filter(
     (field) => !field.deleted && field.logicalType !== 'formula' && field.logicalType !== 'rollup'
@@ -101,16 +82,6 @@ function defaultColumns(table: SchemaTable): ViewColumn[] {
       width: null,
       sortOrder: index
     }));
-}
-
-function uniqueCode(base: string, existing: string[]): string {
-  let code = base.slice(0, 28);
-  let index = 2;
-  while (existing.includes(code)) {
-    code = `${base.slice(0, 26)}_${index}`.slice(0, 32);
-    index += 1;
-  }
-  return code;
 }
 
 export function createView(app: SchemaApp, table: SchemaTable): SchemaView {
@@ -511,13 +482,14 @@ export function ViewDesigner({
                         </span>
                       </Space>
 
-                      <div>
-                        <Space style={{ marginBottom: 8 }}>
-                          <Typography.Text strong>列配置</Typography.Text>
+                      <PanelSection
+                        title="列配置"
+                        extra={
                           <Button size="small" type="link" onClick={syncColumns}>
                             同步表字段
                           </Button>
-                        </Space>
+                        }
+                      >
                         <Table
                           rowKey="fieldId"
                           size="small"
@@ -526,11 +498,11 @@ export function ViewDesigner({
                           dataSource={columnRows}
                           locale={{ emptyText: '还没有列配置，运行时默认显示全部字段' }}
                         />
-                      </div>
+                      </PanelSection>
 
-                      <div>
-                        <Space style={{ marginBottom: 8 }}>
-                          <Typography.Text strong>默认筛选</Typography.Text>
+                      <PanelSection
+                        title="默认筛选"
+                        extra={
                           <Button
                             size="small"
                             type="link"
@@ -546,7 +518,8 @@ export function ViewDesigner({
                           >
                             添加条件
                           </Button>
-                        </Space>
+                        }
+                      >
                         {selectedView.filters.length === 0 ? (
                           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                             没有默认筛选，运行时返回全部有权限的记录
@@ -617,11 +590,11 @@ export function ViewDesigner({
                             ))}
                           </Space>
                         )}
-                      </div>
+                      </PanelSection>
 
-                      <div>
-                        <Space style={{ marginBottom: 8 }}>
-                          <Typography.Text strong>默认排序</Typography.Text>
+                      <PanelSection
+                        title="默认排序"
+                        extra={
                           <Button
                             size="small"
                             type="link"
@@ -637,7 +610,8 @@ export function ViewDesigner({
                           >
                             添加排序
                           </Button>
-                        </Space>
+                        }
+                      >
                         {selectedView.sorts.length === 0 ? (
                           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                             未配置默认排序
@@ -708,11 +682,11 @@ export function ViewDesigner({
                             ))}
                           </Space>
                         )}
-                      </div>
+                      </PanelSection>
 
-                      <div>
-                        <Space style={{ marginBottom: 8 }}>
-                          <Typography.Text strong>分组与汇总</Typography.Text>
+                      <PanelSection
+                        title="分组与汇总"
+                        extra={
                           <Button
                             size="small"
                             type="link"
@@ -732,7 +706,8 @@ export function ViewDesigner({
                           >
                             添加汇总列
                           </Button>
-                        </Space>
+                        }
+                      >
                         <Space direction="vertical" style={{ width: '100%' }} size={8}>
                           <span>
                             分组字段：
@@ -976,7 +951,7 @@ export function ViewDesigner({
                             </Space>
                           )}
                         </Space>
-                      </div>
+                      </PanelSection>
                     </Space>
                   </Card>
                 ) : (

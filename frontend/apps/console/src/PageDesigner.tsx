@@ -15,6 +15,7 @@ import {
   Tag,
   Typography
 } from 'antd';
+import { CanvasItemShell, PanelField } from '@daos/designer';
 import { EmptyState, tokens } from '@daos/ui';
 import type { SchemaApp, SchemaForm, SchemaMenu, SchemaTable, SchemaView } from '@daos/metadata';
 import { AppIcon, AppIconPicker } from './appIcons';
@@ -258,89 +259,96 @@ export function PageDesigner({
                 />
               ) : null}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, alignItems: 'center' }}>
-                <Typography.Text type="secondary">页面名称</Typography.Text>
-                <Input
-                  value={selected.menu.displayName}
-                  onChange={(event) =>
-                    patchMenu(selected.menu.id, (menu) => ({
-                      ...menu,
-                      displayName: event.target.value
-                    }))
-                  }
-                />
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <PanelField label="页面名称" layout="inline">
+                  <Input
+                    value={selected.menu.displayName}
+                    onChange={(event) =>
+                      patchMenu(selected.menu.id, (menu) => ({
+                        ...menu,
+                        displayName: event.target.value
+                      }))
+                    }
+                  />
+                </PanelField>
 
-                <Typography.Text type="secondary">页面图标</Typography.Text>
-                <AppIconPicker
-                  value={selected.menu.icon ?? undefined}
-                  onChange={(icon) =>
-                    patchMenu(selected.menu.id, (menu) => ({ ...menu, icon }))
-                  }
-                />
+                <PanelField label="页面图标" layout="inline">
+                  <AppIconPicker
+                    value={selected.menu.icon ?? undefined}
+                    onChange={(icon) =>
+                      patchMenu(selected.menu.id, (menu) => ({ ...menu, icon }))
+                    }
+                  />
+                </PanelField>
 
-                <Typography.Text type="secondary">数据表</Typography.Text>
-                <Space>
-                  <Tag>{selected.table?.code ?? '-'}</Tag>
-                  <Typography.Text>{selected.table?.displayName ?? '未绑定'}</Typography.Text>
-                </Space>
+                <PanelField label="数据表" layout="inline">
+                  <Space>
+                    <Tag>{selected.table?.code ?? '-'}</Tag>
+                    <Typography.Text>{selected.table?.displayName ?? '未绑定'}</Typography.Text>
+                  </Space>
+                </PanelField>
 
-                <Typography.Text type="secondary">绑定视图</Typography.Text>
-                <Select
-                  style={{ width: '100%' }}
-                  value={selected.view?.id}
-                  placeholder="选择视图"
-                  options={(app.views ?? [])
-                    .filter(
-                      (view) => !view.deleted && view.tableId === selected.table?.id
-                    )
-                    .map((view) => ({ value: view.id, label: view.displayName }))}
-                  onChange={(viewId) =>
-                    patchMenu(selected.menu.id, (menu) => ({
-                      ...menu,
-                      menuType: 'VIEW',
-                      targetId: viewId
-                    }))
-                  }
-                />
+                <PanelField label="绑定视图" layout="inline">
+                  <Select
+                    style={{ width: '100%' }}
+                    value={selected.view?.id}
+                    placeholder="选择视图"
+                    options={(app.views ?? [])
+                      .filter(
+                        (view) => !view.deleted && view.tableId === selected.table?.id
+                      )
+                      .map((view) => ({ value: view.id, label: view.displayName }))}
+                    onChange={(viewId) =>
+                      patchMenu(selected.menu.id, (menu) => ({
+                        ...menu,
+                        menuType: 'VIEW',
+                        targetId: viewId
+                      }))
+                    }
+                  />
+                </PanelField>
 
-                <Typography.Text type="secondary">绑定表单</Typography.Text>
-                <Select
-                  style={{ width: '100%' }}
-                  value={selected.form?.id}
-                  placeholder="选择表单"
-                  options={app.forms
-                    .filter(
-                      (form) => !form.deleted && form.tableId === selected.table?.id
-                    )
-                    .map((form) => ({ value: form.id, label: form.displayName }))}
-                  onChange={(formId) =>
-                    patchMenu(selected.menu.id, (menu) => ({
-                      ...menu,
-                      ext: { ...menu.ext, formId }
-                    }))
-                  }
-                />
+                <PanelField label="绑定表单" layout="inline">
+                  <Select
+                    style={{ width: '100%' }}
+                    value={selected.form?.id}
+                    placeholder="选择表单"
+                    options={app.forms
+                      .filter(
+                        (form) => !form.deleted && form.tableId === selected.table?.id
+                      )
+                      .map((form) => ({ value: form.id, label: form.displayName }))}
+                    onChange={(formId) =>
+                      patchMenu(selected.menu.id, (menu) => ({
+                        ...menu,
+                        ext: { ...menu.ext, formId }
+                      }))
+                    }
+                  />
+                </PanelField>
 
-                <Typography.Text type="secondary">排序</Typography.Text>
-                <InputNumber
-                  min={0}
-                  value={selected.menu.sortOrder}
-                  onChange={(value) =>
-                    patchMenu(selected.menu.id, (menu) => ({
-                      ...menu,
-                      sortOrder: value ?? menu.sortOrder
-                    }))
-                  }
-                />
+                <PanelField label="排序" layout="inline">
+                  <InputNumber
+                    min={0}
+                    value={selected.menu.sortOrder}
+                    onChange={(value) =>
+                      patchMenu(selected.menu.id, (menu) => ({
+                        ...menu,
+                        sortOrder: value ?? menu.sortOrder
+                      }))
+                    }
+                  />
+                </PanelField>
 
-                <Typography.Text type="secondary">运行端可见</Typography.Text>
-                <Switch
-                  checked={selected.menu.visible}
-                  onChange={(visible) =>
-                    patchMenu(selected.menu.id, (menu) => ({ ...menu, visible }))
-                  }
-                />
-              </div>
+                <PanelField label="运行端可见" layout="inline">
+                  <Switch
+                    checked={selected.menu.visible}
+                    onChange={(visible) =>
+                      patchMenu(selected.menu.id, (menu) => ({ ...menu, visible }))
+                    }
+                  />
+                </PanelField>
+              </Space>
 
               <Divider style={{ margin: '4px 0' }} />
 
@@ -385,18 +393,14 @@ export function PageDesigner({
                   {blocks.map((block, index) => {
                     const active = block.id === selectedBlockId;
                     return (
-                      <div
+                      <CanvasItemShell
                         key={block.id}
+                        active={active}
+                        padding="8px 10px"
+                        radius={tokens.radiusMd}
                         onClick={() => setSelectedBlockId(block.id)}
-                        style={{
-                          border: `1px solid ${active ? tokens.colorPrimary : tokens.colorBorder}`,
-                          borderRadius: tokens.radiusMd,
-                          padding: '8px 10px',
-                          background: active ? tokens.colorPrimaryBg : tokens.colorBgContainer,
-                          cursor: 'pointer'
-                        }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
                           <Tag style={{ marginInlineEnd: 0 }}>
                             {PAGE_BLOCK_LABELS[block.type]}
                           </Tag>
@@ -439,29 +443,25 @@ export function PageDesigner({
                         </div>
 
                         {active ? (
-                          <div
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '72px 1fr',
-                              gap: 8,
-                              alignItems: 'center',
-                              marginTop: 10
-                            }}
+                          <Space
+                            direction="vertical"
+                            size={8}
+                            style={{ width: '100%', marginTop: 10 }}
                             onClick={(event) => event.stopPropagation()}
                           >
-                            <Typography.Text type="secondary">标题</Typography.Text>
-                            <Input
-                              size="small"
-                              value={block.title}
-                              placeholder="组件的显示标题"
-                              onChange={(event) =>
-                                patchBlock(block.id, { title: event.target.value })
-                              }
-                            />
+                            <PanelField label="标题" layout="inline" labelWidth={72}>
+                              <Input
+                                size="small"
+                                value={block.title}
+                                placeholder="组件的显示标题"
+                                onChange={(event) =>
+                                  patchBlock(block.id, { title: event.target.value })
+                                }
+                              />
+                            </PanelField>
 
                             {block.type === 'text' ? (
-                              <>
-                                <Typography.Text type="secondary">内容</Typography.Text>
+                              <PanelField label="内容" layout="inline" labelWidth={72}>
                                 <Input.TextArea
                                   rows={3}
                                   value={block.text}
@@ -470,10 +470,9 @@ export function PageDesigner({
                                     patchBlock(block.id, { text: event.target.value })
                                   }
                                 />
-                              </>
+                              </PanelField>
                             ) : block.type === 'form' ? (
-                              <>
-                                <Typography.Text type="secondary">表单</Typography.Text>
+                              <PanelField label="表单" layout="inline" labelWidth={72}>
                                 <Select
                                   size="small"
                                   style={{ width: '100%' }}
@@ -487,10 +486,9 @@ export function PageDesigner({
                                     }))}
                                   onChange={(formId) => patchBlock(block.id, { formId })}
                                 />
-                              </>
+                              </PanelField>
                             ) : (
-                              <>
-                                <Typography.Text type="secondary">视图</Typography.Text>
+                              <PanelField label="视图" layout="inline" labelWidth={72}>
                                 <Select
                                   size="small"
                                   style={{ width: '100%' }}
@@ -504,11 +502,11 @@ export function PageDesigner({
                                     }))}
                                   onChange={(viewId) => patchBlock(block.id, { viewId })}
                                 />
-                              </>
+                              </PanelField>
                             )}
-                          </div>
+                          </Space>
                         ) : null}
-                      </div>
+                      </CanvasItemShell>
                     );
                   })}
                 </Space>

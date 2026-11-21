@@ -22,6 +22,14 @@ import {
   DeleteOutlined,
   PlusOutlined
 } from '@ant-design/icons';
+import {
+  CanvasItemShell,
+  PanelField,
+  PropertyPanel,
+  SwitchRow,
+  newId,
+  uniqueCode
+} from '@daos/designer';
 import { EmptyState, tokens } from '@daos/ui';
 import { componentFor, componentLabel } from '@daos/renderer';
 import type {
@@ -36,32 +44,6 @@ import type {
   SchemaTable,
   ValueType
 } from '@daos/metadata';
-
-const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-
-function newId(): string {
-  let time = Date.now();
-  let out = '';
-  for (let i = 0; i < 10; i += 1) {
-    out = CODE_ALPHABET.charAt(time % 32) + out;
-    time = Math.floor(time / 32);
-  }
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  for (const byte of bytes) {
-    out += CODE_ALPHABET.charAt(byte % 32);
-  }
-  return out;
-}
-
-function uniqueCode(base: string, existing: string[]): string {
-  if (!existing.includes(base)) return base;
-  for (let index = 2; index < 100; index += 1) {
-    const candidate = `${base}_${index}`;
-    if (!existing.includes(candidate)) return candidate;
-  }
-  return `${base}_${Date.now()}`;
-}
 
 const DEFAULT_LAYOUT: FormLayout = {
   scene: 'CREATE',
@@ -793,22 +775,10 @@ export function FormDesigner({
                 ? draft.tables.find((candidate) => candidate.id === item.subformTableId)
                 : null;
               return (
-                <div
+                <CanvasItemShell
                   key={item.id}
+                  active={item.id === selectedFieldId}
                   onClick={() => setSelectedFieldId(item.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '10px 12px',
-                    borderRadius: tokens.radiusSm,
-                    border: `1px solid ${
-                      item.id === selectedFieldId ? tokens.colorPrimary : tokens.colorBorder
-                    }`,
-                    background:
-                      item.id === selectedFieldId ? tokens.colorPrimaryBg : tokens.colorBgContainer,
-                    cursor: 'pointer'
-                  }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -865,14 +835,14 @@ export function FormDesigner({
                       onClick={() => removeField(item.id)}
                     />
                   </Space>
-                </div>
+                </CanvasItemShell>
               );
             })}
           </Space>
         )}
       </Card>
 
-      <Card size="small" title="属性" style={{ width: 280, flex: '0 0 280px' }}>
+      <PropertyPanel>
         {!form ? (
           <Typography.Text type="secondary">选择表单后编辑属性</Typography.Text>
         ) : (
@@ -903,12 +873,8 @@ export function FormDesigner({
               </Typography.Text>
             ) : (
               <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                <div>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    显示名称
-                  </Typography.Text>
+                <PanelField label="显示名称">
                   <Input
-                    style={{ marginTop: 4 }}
                     value={selectedField.label ?? ''}
                     maxLength={40}
                     onChange={(event) =>
@@ -918,13 +884,10 @@ export function FormDesigner({
                       }))
                     }
                   />
-                </div>
-                <div>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    占宽
-                  </Typography.Text>
+                </PanelField>
+                <PanelField label="占宽">
                   <Select
-                    style={{ marginTop: 4, width: '100%' }}
+                    style={{ width: '100%' }}
                     value={selectedField.span}
                     options={[
                       { value: 24, label: '整行' },
@@ -935,7 +898,7 @@ export function FormDesigner({
                       patchField(selectedField.id, (current) => ({ ...current, span: value }))
                     }
                   />
-                </div>
+                </PanelField>
                 {selectedField.component === 'subform' ? (
                   <>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -945,11 +908,8 @@ export function FormDesigner({
                       {' · '}
                       {selectedField.subformFields.length} 列
                     </Typography.Text>
-                    <div>
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        行数下限 / 上限
-                      </Typography.Text>
-                      <Space style={{ marginTop: 4, width: '100%' }}>
+                    <PanelField label="行数下限 / 上限">
+                      <Space style={{ width: '100%' }}>
                         <InputNumber
                           min={0}
                           max={200}
@@ -973,73 +933,57 @@ export function FormDesigner({
                           }
                         />
                       </Space>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 13 }}>允许新增行</span>
-                      <Switch
-                        size="small"
-                        checked={selectedField.allowAdd}
-                        onChange={(checked) =>
-                          patchField(selectedField.id, (current) => ({
-                            ...current,
-                            allowAdd: checked
-                          }))
-                        }
-                      />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 13 }}>允许删除行</span>
-                      <Switch
-                        size="small"
-                        checked={selectedField.allowDelete}
-                        onChange={(checked) =>
-                          patchField(selectedField.id, (current) => ({
-                            ...current,
-                            allowDelete: checked
-                          }))
-                        }
-                      />
-                    </div>
+                    </PanelField>
+                    <SwitchRow
+                      label="允许新增行"
+                      checked={selectedField.allowAdd}
+                      onChange={(checked) =>
+                        patchField(selectedField.id, (current) => ({
+                          ...current,
+                          allowAdd: checked
+                        }))
+                      }
+                    />
+                    <SwitchRow
+                      label="允许删除行"
+                      checked={selectedField.allowDelete}
+                      onChange={(checked) =>
+                        patchField(selectedField.id, (current) => ({
+                          ...current,
+                          allowDelete: checked
+                        }))
+                      }
+                    />
                   </>
                 ) : (
                   <>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 13 }}>必填</span>
-                      <Switch
-                        size="small"
-                        checked={Boolean(
-                          selectedField.requiredOverride ||
-                            table?.fields.find((field) => field.id === selectedField.fieldId)?.constraints
-                              .required
-                        )}
-                        disabled={Boolean(
+                    <SwitchRow
+                      label="必填"
+                      checked={Boolean(
+                        selectedField.requiredOverride ||
                           table?.fields.find((field) => field.id === selectedField.fieldId)?.constraints
                             .required
-                        )}
-                        onChange={(checked) =>
-                          patchField(selectedField.id, (current) => ({
-                            ...current,
-                            requiredOverride: checked ? true : null
-                          }))
-                        }
-                      />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 13 }}>只读</span>
-                      <Switch
-                        size="small"
-                        checked={selectedField.readonly}
-                        onChange={(checked) =>
-                          patchField(selectedField.id, (current) => ({ ...current, readonly: checked }))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        占位提示
-                      </Typography.Text>
+                      )}
+                      disabled={Boolean(
+                        table?.fields.find((field) => field.id === selectedField.fieldId)?.constraints
+                          .required
+                      )}
+                      onChange={(checked) =>
+                        patchField(selectedField.id, (current) => ({
+                          ...current,
+                          requiredOverride: checked ? true : null
+                        }))
+                      }
+                    />
+                    <SwitchRow
+                      label="只读"
+                      checked={selectedField.readonly}
+                      onChange={(checked) =>
+                        patchField(selectedField.id, (current) => ({ ...current, readonly: checked }))
+                      }
+                    />
+                    <PanelField label="占位提示">
                       <Input
-                        style={{ marginTop: 4 }}
                         value={selectedField.placeholder ?? ''}
                         maxLength={64}
                         onChange={(event) =>
@@ -1049,13 +993,9 @@ export function FormDesigner({
                           }))
                         }
                       />
-                    </div>
-                    <div>
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        帮助文字
-                      </Typography.Text>
+                    </PanelField>
+                    <PanelField label="帮助文字">
                       <Input.TextArea
-                        style={{ marginTop: 4 }}
                         rows={2}
                         maxLength={200}
                         value={selectedField.helpText ?? ''}
@@ -1066,14 +1006,14 @@ export function FormDesigner({
                           }))
                         }
                       />
-                    </div>
+                    </PanelField>
                   </>
                 )}
               </Space>
             )}
           </Space>
         )}
-      </Card>
+      </PropertyPanel>
 
       <Modal
         title="联动规则"
