@@ -111,7 +111,7 @@ export function ComponentGallery() {
             <EmptyState
               title="还没有数据"
               description="轻量图标 + 一句引导 + 操作，不使用大面积色块。"
-              action={<Button type="primary">立即创建</Button>}
+              action={<Button type="primary" onClick={() => message.info('已触发新建')}>立即创建</Button>}
             />
           </ComponentEntry>
           <ComponentEntry name="ErrorState" usage="加载失败">
